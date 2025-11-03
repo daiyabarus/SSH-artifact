@@ -34,19 +34,27 @@ class DashboardService:
         """
         results = {}
 
-        # Query 1: GCell
-        results["gcell"] = self._query_gcell(managed_element)
-
-        # Query 2: SCOT (combined SiteID and NCELL SiteID)
+        # Query: SCOT (combined SiteID and NCELL SiteID) - query first to use for Timing Advance and GCell
         results["scot"] = self._query_scot_combined(managed_element)
 
-        # Query 3: Mapping
+        # Query: LTE Timing Advance - now augmented with NCELL SiteID from SCOT
+        results["timingadvance"] = self._query_timingadvance_augmented(
+            managed_element, results["scot"]
+        )
+
+        # Query: LTE Timing Advance - non-augmented (original)
+        results["timingadvance_original"] = self._query_timingadvance_original(managed_element)
+
+        # Query 1: GCell - now augmented with NCELL SiteID from SCOT
+        results["gcell"] = self._query_gcell_augmented(managed_element, results["scot"])
+
+        # Query 2: Mapping
         results["mapping"] = self._query_mapping(managed_element)
 
-        # Query 4: LTE Hourly (FIXED eNodeBId mapping)
+        # Query 3: LTE Hourly (FIXED eNodeBId mapping)
         results["ltehourly"] = self._query_ltehourly(managed_element)
 
-        # Query 5: 2G Hourly (using mapped Site Names)
+        # Query 4: 2G Hourly (using mapped Site Names)
         if results["mapping"] is not None and not results["mapping"].is_empty():
             site_names = (
                 results["mapping"]["new Site NAME"].to_list()
@@ -57,15 +65,113 @@ class DashboardService:
         else:
             results["twoghourly"] = None
 
+        # Query 6: Merged GCell Coverage
+        results["gcell_coverage"] = self._merge_gcell_coverage(results)
+
         return results
 
-    def _query_gcell(self, managed_element: str) -> Optional[pl.DataFrame]:
-        """Query tbl_gcell where MSC = Managed Element"""
+    def _query_timingadvance_augmented(
+        self, managed_element: str, scot_data: Optional[pl.DataFrame]
+    ) -> Optional[pl.DataFrame]:
+        """
+        Query tbl_timingadvance where Managed Element = managed_element or Managed Element from NCELL SiteID in SCOT results.
+        If SCOT data is None or empty, falls back to original Managed Element-only query.
+        """
+        try:
+            managed_values = [managed_element]
+
+            if scot_data is not None and not scot_data.is_empty():
+                if "NCELL SiteID" in scot_data.columns:
+                    ncell_site_ids = scot_data["NCELL SiteID"].unique().to_list()
+                    # Filter valid NCELL SiteID (not null, not empty, and not equal to managed_element to avoid duplicates)
+                    valid_ncell_ids = [
+                        str(nid).strip()
+                        for nid in ncell_site_ids
+                        if nid is not None
+                        and str(nid).strip()
+                        and str(nid).strip() != managed_element
+                        and str(nid).lower() != "nan"
+                    ]
+                    managed_values.extend(valid_ncell_ids)
+                    print(
+                        f"DEBUG: Augmented Timing Advance with {len(valid_ncell_ids)} NCELL SiteIDs: {valid_ncell_ids}"
+                    )
+
+            if len(managed_values) == 1:
+                # Fallback to original query if no NCELL SiteIDs
+                query = f"SELECT * FROM tbl_timingadvance WHERE \"Managed Element\" = '{managed_element}'"
+            else:
+                # Build IN clause for multiple Managed Element values
+                managed_str = "','".join(managed_values)
+                query = f"SELECT * FROM tbl_timingadvance WHERE \"Managed Element\" IN ('{managed_str}')"
+
+            print(f"DEBUG: Augmented Timing Advance query: {query}")
+            return self._repository.query(query)
+        except Exception as e:
+            print(f"Error querying augmented Timing Advance: {str(e)}")
+            # Fallback to original query on error
+            return self._query_timingadvance_original(managed_element)
+
+    def _query_timingadvance_original(
+        self, managed_element: str
+    ) -> Optional[pl.DataFrame]:
+        """Original Timing Advance query (fallback)"""
+        try:
+            query = f"SELECT * FROM tbl_timingadvance WHERE \"Managed Element\" = '{managed_element}'"
+            return self._repository.query(query)
+        except Exception as e:
+            print(f"Error querying original Timing Advance: {str(e)}")
+            return None
+
+    def _query_gcell_augmented(
+        self, managed_element: str, scot_data: Optional[pl.DataFrame]
+    ) -> Optional[pl.DataFrame]:
+        """
+        Query tbl_gcell where MSC = Managed Element or MSC from NCELL SiteID in SCOT results.
+        If SCOT data is None or empty, falls back to original MSC-only query.
+        """
+        try:
+            msc_values = [managed_element]
+
+            if scot_data is not None and not scot_data.is_empty():
+                if "NCELL SiteID" in scot_data.columns:
+                    ncell_site_ids = scot_data["NCELL SiteID"].unique().to_list()
+                    # Filter valid NCELL SiteID (not null, not empty, and not equal to managed_element to avoid duplicates)
+                    valid_ncell_ids = [
+                        str(nid).strip()
+                        for nid in ncell_site_ids
+                        if nid is not None
+                        and str(nid).strip()
+                        and str(nid).strip() != managed_element
+                        and str(nid).lower() != "nan"
+                    ]
+                    msc_values.extend(valid_ncell_ids)
+                    print(
+                        f"DEBUG: Augmented GCell with {len(valid_ncell_ids)} NCELL SiteIDs: {valid_ncell_ids}"
+                    )
+
+            if len(msc_values) == 1:
+                # Fallback to original query if no NCELL SiteIDs
+                query = f"SELECT * FROM tbl_gcell WHERE \"MSC\" = '{managed_element}'"
+            else:
+                # Build IN clause for multiple MSC values
+                msc_str = "','".join(msc_values)
+                query = f"SELECT * FROM tbl_gcell WHERE \"MSC\" IN ('{msc_str}')"
+
+            print(f"DEBUG: Augmented GCell query: {query}")
+            return self._repository.query(query)
+        except Exception as e:
+            print(f"Error querying augmented GCell: {str(e)}")
+            # Fallback to original query on error
+            return self._query_gcell_original(managed_element)
+
+    def _query_gcell_original(self, managed_element: str) -> Optional[pl.DataFrame]:
+        """Original GCell query (fallback)"""
         try:
             query = f"SELECT * FROM tbl_gcell WHERE \"MSC\" = '{managed_element}'"
             return self._repository.query(query)
         except Exception as e:
-            print(f"Error querying GCell: {str(e)}")
+            print(f"Error querying original GCell: {str(e)}")
             return None
 
     def _query_scot_combined(self, managed_element: str) -> Optional[pl.DataFrame]:
@@ -104,7 +210,7 @@ class DashboardService:
                 return None
 
             if "eNodeBId" not in gcell_data.columns:
-                print(f"DEBUG: eNodeBId column not found in GCell data")
+                print("DEBUG: eNodeBId column not found in GCell data")
                 return None
 
             # Ambil semua eNodeBId yang unik dari GCell
@@ -112,7 +218,7 @@ class DashboardService:
             print(f"DEBUG: Found eNodeBId from GCell: {enodeb_ids}")
 
             if not enodeb_ids:
-                print(f"DEBUG: No eNodeBId values found in GCell")
+                print("DEBUG: No eNodeBId values found in GCell")
                 return None
 
             # Step 2: Query LTE Hourly dengan filter data yang valid
@@ -331,4 +437,113 @@ class DashboardService:
             return self._repository.query(query)
         except Exception as e:
             print(f"Error querying 2G Hourly: {str(e)}")
+            return None
+
+    def _merge_gcell_coverage(
+        self, results: Dict[str, Optional[pl.DataFrame]]
+    ) -> Optional[pl.DataFrame]:
+        """
+        Merge GCell (anchor) with Timing Advance, SCOT, and Mapping data based on specified criteria.
+        Results in a combined table named 'gcell_coverage'.
+
+        Joins:
+        - GCell.CellName == TimingAdvance.Eutrancell → Add TimingAdvance.TA90
+        - GCell.CellName == SCOT."Cell_PI-1" → Add SCOT."Min of S2S Distance" (coalesce to 0 if null/blank)
+        - Mapping is included but join criteria not specified; assuming left join on a common key if available
+          (e.g., GCell.MSC == Mapping."New Tower ID" – adjust as needed)
+
+        Returns: Polars DataFrame with merged data
+        """
+        try:
+            df_gcell = results.get("gcell")
+            df_timing = results.get("timingadvance")
+            df_scot = results.get("scot")
+            # df_mapping = results.get("mapping")
+
+            if df_gcell is None or df_gcell.is_empty():
+                print("DEBUG: No GCell data available for merge")
+                return None
+
+            # Start with GCell as anchor, ensure CellName is string
+            df_coverage = df_gcell.clone().with_columns(
+                pl.col("CellName").cast(pl.Utf8)
+            )
+
+            # Join with Timing Advance: GCell.CellName == TimingAdvance.Eutrancell, add TA90 (cast to float)
+            if df_timing is not None and not df_timing.is_empty():
+                if (
+                    "CellName" in df_coverage.columns
+                    and "Eutrancell" in df_timing.columns
+                    and "TA90" in df_timing.columns
+                ):
+                    timing_join = df_timing.select(
+                        [
+                            pl.col("Eutrancell").cast(pl.Utf8).alias("CellName"),
+                            pl.col("TA90").cast(pl.Float64, strict=False).alias("TA90"),
+                        ]
+                    )
+                    df_coverage = df_coverage.join(
+                        timing_join, on="CellName", how="left"
+                    )
+                    print(f"DEBUG: Merged {len(df_timing)} Timing Advance records")
+                else:
+                    print("DEBUG: Required columns missing for Timing Advance join")
+
+            # Join with SCOT: GCell.CellName == SCOT."Cell_PI-1", add "Min of S2S Distance" (coalesce to 0)
+            if df_scot is not None and not df_scot.is_empty():
+                if (
+                    "CellName" in df_coverage.columns
+                    and "Cell_PI-1" in df_scot.columns
+                    and "Min of S2S Distance" in df_scot.columns
+                ):
+                    # Rename join key for consistency, cast types
+                    df_scot_join = df_scot.select(
+                        [
+                            pl.col("Cell_PI-1").cast(pl.Utf8).alias("CellName"),
+                            pl.col("Min of S2S Distance").cast(pl.Float64),
+                            pl.col("New FINAL Remark COSTv3.0T").alias("SCOT Remark"),
+                            pl.col("NCELL SiteID").alias("1st Tier"),
+                        ]
+                    )
+                    df_coverage = df_coverage.join(
+                        df_scot_join, on="CellName", how="left"
+                    )
+                    # Coalesce "Min of S2S Distance" to 0 if null
+                    if "Min of S2S Distance" in df_coverage.columns:
+                        df_coverage = df_coverage.with_columns(
+                            pl.coalesce(
+                                [pl.col("Min of S2S Distance"), pl.lit(0.0)]
+                            ).alias("Min of S2S Distance")
+                        )
+                    print(f"DEBUG: Merged {len(df_scot)} SCOT records")
+                else:
+                    print("DEBUG: Required columns missing for SCOT join")
+
+            # # Join with Mapping: Assuming GCell.MSC == Mapping."New Tower ID" (adjust if different)
+            # if df_mapping is not None and not df_mapping.is_empty():
+            #     if "MSC" in df_coverage.columns and "New Tower ID" in df_mapping.columns:
+            #         # Cast join keys to string for safety
+            #         df_coverage = df_coverage.with_columns(
+            #             pl.col("MSC").cast(pl.Utf8)
+            #         )
+            #         df_mapping_join = df_mapping.with_columns(
+            #             pl.col("New Tower ID").cast(pl.Utf8)
+            #         )
+            #         df_coverage = df_coverage.join(
+            #             df_mapping_join,
+            #             left_on="MSC",
+            #             right_on="New Tower ID",
+            #             how="left"
+            #         )
+            #         print(f"DEBUG: Merged {len(df_mapping)} Mapping records")
+            #     else:
+            #         print("DEBUG: Required columns missing for Mapping join")
+
+            print(
+                f"DEBUG: Final gcell_coverage has {len(df_coverage)} records and {len(df_coverage.columns)} columns"
+            )
+            return df_coverage
+
+        except Exception as e:
+            print(f"Error merging gcell_coverage: {str(e)}")
             return None
