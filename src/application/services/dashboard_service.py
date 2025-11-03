@@ -321,8 +321,6 @@ class DashboardService:
                 print(f"DEBUG: No eNodeBId values found in GCell")
                 return None
 
-            # Step 2: Query LTE Hourly berdasarkan eNodeBId
-            # Filter hanya eNodeBId yang valid
             valid_enodeb_ids = []
             for enodeb_id in enodeb_ids:
                 if enodeb_id is None:
@@ -518,26 +516,6 @@ class DashboardService:
                     print(f"DEBUG: Merged {len(df_scot)} SCOT records")
                 else:
                     print("DEBUG: Required columns missing for SCOT join")
-
-            # # Join with Mapping: Assuming GCell.MSC == Mapping."New Tower ID" (adjust if different)
-            # if df_mapping is not None and not df_mapping.is_empty():
-            #     if "MSC" in df_coverage.columns and "New Tower ID" in df_mapping.columns:
-            #         # Cast join keys to string for safety
-            #         df_coverage = df_coverage.with_columns(
-            #             pl.col("MSC").cast(pl.Utf8)
-            #         )
-            #         df_mapping_join = df_mapping.with_columns(
-            #             pl.col("New Tower ID").cast(pl.Utf8)
-            #         )
-            #         df_coverage = df_coverage.join(
-            #             df_mapping_join,
-            #             left_on="MSC",
-            #             right_on="New Tower ID",
-            #             how="left"
-            #         )
-            #         print(f"DEBUG: Merged {len(df_mapping)} Mapping records")
-            #     else:
-            #         print("DEBUG: Required columns missing for Mapping join")
 
             print(
                 f"DEBUG: Final gcell_coverage has {len(df_coverage)} records and {len(df_coverage.columns)} columns"

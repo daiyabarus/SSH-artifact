@@ -1,27 +1,23 @@
 """
 Dashboard page - Data visualization and analytics
+Clean and effective version
 """
 
 import streamlit as st
 import polars as pl
+import pandas as pd
 from src.infrastructure.database.repository import DatabaseRepository
 from src.application.services.dashboard_service import DashboardService
 from src.application.services.coverage_map_service import render_coverage_map
+from src.application.services.ta_distribution_visualizer import TADistributionVisualizer
 
 
 def render():
     """Render the dashboard page"""
-    st.title("📊 Dashboard")
-    st.markdown("---")
-
-    # Initialize services
     repository = DatabaseRepository()
     dashboard_service = DashboardService(repository)
-
-    # Filters section
+    
     st.sidebar.header("🔍 Filters")
-
-    # Get unique Managed Element values
     try:
         managed_elements = dashboard_service.get_managed_elements()
     except Exception as e:
@@ -29,227 +25,155 @@ def render():
         return
 
     if not managed_elements:
-        st.warning(
-            "⚠️ No data available in Timing Advance table. Please import data first."
-        )
+        st.warning("⚠️ No data available in Timing Advance table. Please import data first.")
         return
 
-    # Managed Element filter dropdown
     selected_element = st.sidebar.selectbox(
-        "Managed Element",
+        "TOWERID",
         options=["All"] + managed_elements,
         index=0,
         help="Filter data by Managed Element",
     )
 
-    # Run Query button
-    run_query = st.sidebar.button("▶️ Run Query", type="primary", width="stretch")
+    run_query = st.sidebar.button("▶️ Run Query", type="primary")
 
-    # Display selected filter
-    # st.subheader("📋 Current Selection")
-    # st.metric("Managed Element", selected_element)
-
-    st.markdown("---")
-
-    # Execute queries when button clicked
     if run_query and selected_element != "All":
         with st.spinner("Running queries..."):
             results = dashboard_service.execute_all_queries(selected_element)
             _render_query_results(results, selected_element)
-    elif run_query and selected_element == "All":
+    elif run_query:
         st.warning("⚠️ Please select a specific Managed Element to run queries")
     else:
         st.info("ℹ️ Select a Managed Element and click 'Run Query' to start analysis")
 
 
-def _render_query_results(results: dict, managed_element: str):
-    """Render all query results in organized sections"""
+def _get_scot_non_augmented(results: dict, managed_element: str):
+    """
+    Filter SCOT data untuk mendapatkan hanya data NON-AUGMENTED
+    (hanya data yang SiteID = managed_element)
+    """
+    df_scot = results.get("scot")
+    
+    if df_scot is None or df_scot.is_empty():
+        return None
+    
+    df_non_augmented = df_scot.filter(pl.col("SiteID") == managed_element)
+    
+    if df_non_augmented.is_empty():
+        return None
+    
+    target_columns = [
+        "SiteID", "Sectorid_v2", "TAPC90", 
+        "Cell_PI-1", "NCELL SiteID", "Min of S2S Distance", 
+        "New FINAL Remark COSTv3.0T", "Additional Tilt Recommendation"
+    ]
+    
+    available_columns = [col for col in target_columns if col in df_non_augmented.columns]
+    
+    if not available_columns:
+        return None
+    
+    if "Sectorid_v2" in available_columns:
+        df_sorted = df_non_augmented.select(available_columns).sort(["Sectorid_v2", "Cell_PI-1"])
+    else:
+        df_sorted = df_non_augmented.select(available_columns)
+    
+    return df_sorted
 
-    # Coverage Map Visualization - Pindah ke atas
-    render_coverage_map(results)
 
-    # Query: LTE Timing Advance Data (Augmented)
-    st.subheader("🔄 LTE Timing Advance Data (Augmented)")
+def _render_ta_distribution_section(results: dict, managed_element: str):
+    """Render TA Distribution visualization section"""
+    df_timingadvance = results.get("timingadvance_original")
+    
+    if df_timingadvance is None or df_timingadvance.is_empty():
+        st.warning("⚠️ No Timing Advance data available for TA Distribution analysis")
+        return
+    
+    distance_cols = [
+        "0 - 78 m", "78 - 234 m", "234 - 390 m", "390 - 546 m",
+        "546 - 702 m", "702 - 858 m", "858 - 1014 m", "1014 - 1560 m",
+        "1560 - 2106 m", "2106 - 2652 m", "2652 - 3120 m", "3120 - 3900 m",
+        "3900 - 6318 m", "6318 - 10062 m", "10062 - 13962 m", "13962 - 20000 m"
+    ]
+    
+    cdf_cols = ["78", "234", "390", "546", "702", "858", "1014", "1560", 
+                "2106", "2652", "3120", "3900", "6318", "10062", "13962", "20000"]
+    
+    required_cols = ["Sector_Name", "Band"] + distance_cols + cdf_cols
+    missing_cols = [col for col in required_cols if col not in df_timingadvance.columns]
+    
+    if missing_cols:
+        st.error(f"❌ Missing required columns: {missing_cols[:5]}...")
+        return
+    
+    visualizer = TADistributionVisualizer()
+    visualizer.display_sector_charts_in_rows(df_timingadvance, managed_element)
+
+
+def _styled_dataframe(df, height: int = 400):
+    """Render dataframe dengan styling yang konsisten"""
+    st.markdown("""
+        <style>
+        .stDataFrame table {
+            font-size: 12px !important;
+        }
+        .stDataFrame thead th {
+            background-color: #1f77b4 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.dataframe(
+        df,
+        height=height,
+        width='stretch',
+        hide_index=True
+    )
+
+
+def _render_data_section(title: str, results_key: str, results: dict, 
+                        expanded: bool = False, height: int = 400,
+                        show_metrics: bool = False):
+    """Render a standardized data section"""
+    df = results.get(results_key)
+    
+    if df is None or df.is_empty():
+        st.info(f"No data found in {results_key}")
+        return
+    
+    st.success(f"✅ Found {len(df):,} records")
+    
+    if results_key == "gcell" and "eNodeBId" in df.columns:
+        enodeb_ids = df["eNodeBId"].unique().to_list()
+        st.info(f"**eNodeBId for mapping:** {', '.join(map(str, enodeb_ids))}")
+    
+    with st.expander(f"View {title}", expanded=expanded):
+        _styled_dataframe(df.to_pandas(), height)
+
+
+def _render_metrics_section(results: dict):
+    """Render key metrics for data sections"""
     df_timingadvance = results.get("timingadvance")
+    df_coverage = results.get("gcell_coverage")
+    
     if df_timingadvance is not None and not df_timingadvance.is_empty():
-        st.success(f"✅ Found {len(df_timingadvance):,} records")
-
-        # Show summary stats if relevant columns exist
         if "TA90" in df_timingadvance.columns:
             col1, col2 = st.columns(2)
             with col1:
                 unique_ta = df_timingadvance["TA90"].n_unique()
                 st.metric("Unique TA90 Values", unique_ta)
-            with col2:
+            with col2:  
                 avg_ta = df_timingadvance["TA90"].mean()
-                st.metric(
-                    "Avg TA90 Value", f"{avg_ta:.2f}" if avg_ta is not None else "N/A"
-                )
-        elif "Timing Advance" in df_timingadvance.columns or any(
-            "TA" in col for col in df_timingadvance.columns
-        ):
-            col1, col2 = st.columns(2)
-            with col1:
-                ta_col = next(
-                    (col for col in df_timingadvance.columns if "TA" in col), None
-                )
-                unique_ta = df_timingadvance[ta_col].n_unique() if ta_col else "N/A"
-                st.metric("Unique TA Values", unique_ta)
-            with col2:
-                avg_ta = df_timingadvance[ta_col].mean() if ta_col else "N/A"
-                st.metric("Avg TA Value", f"{avg_ta:.2f}" if avg_ta != "N/A" else "N/A")
-
-        with st.expander("View LTE Timing Advance Data (Augmented)", expanded=True):
-            st.dataframe(df_timingadvance.to_pandas(), width="stretch", height=400)
-    else:
-        st.info("No data found in tbl_timingadvance (Augmented)")
-
-    st.markdown("---")
-
-    # Query: LTE Timing Advance Data (Non-Augmented / Original)
-    st.subheader("🔄 LTE Timing Advance Data (Non-Augmented)")
-    df_timingadvance_original = results.get("timingadvance_original")
-    if df_timingadvance_original is not None and not df_timingadvance_original.is_empty():
-        st.success(f"✅ Found {len(df_timingadvance_original):,} records")
-
-        # Show summary stats if relevant columns exist
-        if "TA90" in df_timingadvance_original.columns:
-            col1, col2 = st.columns(2)
-            with col1:
-                unique_ta = df_timingadvance_original["TA90"].n_unique()
-                st.metric("Unique TA90 Values", unique_ta)
-            with col2:
-                avg_ta = df_timingadvance_original["TA90"].mean()
-                st.metric(
-                    "Avg TA90 Value", f"{avg_ta:.2f}" if avg_ta is not None else "N/A"
-                )
-        elif "Timing Advance" in df_timingadvance_original.columns or any(
-            "TA" in col for col in df_timingadvance_original.columns
-        ):
-            col1, col2 = st.columns(2)
-            with col1:
-                ta_col = next(
-                    (col for col in df_timingadvance_original.columns if "TA" in col), None
-                )
-                unique_ta = df_timingadvance_original[ta_col].n_unique() if ta_col else "N/A"
-                st.metric("Unique TA Values", unique_ta)
-            with col2:
-                avg_ta = df_timingadvance_original[ta_col].mean() if ta_col else "N/A"
-                st.metric("Avg TA Value", f"{avg_ta:.2f}" if avg_ta != "N/A" else "N/A")
-
-        with st.expander("View LTE Timing Advance Data (Non-Augmented)", expanded=True):
-            st.dataframe(df_timingadvance_original.to_pandas(), width="stretch", height=400)
-    else:
-        st.info("No data found in tbl_timingadvance (Non-Augmented)")
-
-    st.markdown("---")
-
-    # Query 1: GCell Data
-    st.subheader("1️⃣ GCell Data")
-    df_gcell = results.get("gcell")
-    if df_gcell is not None and not df_gcell.is_empty():
-        st.success(f"✅ Found {len(df_gcell):,} records")
-
-        # Tampilkan eNodeBId untuk debugging mapping
-        if "eNodeBId" in df_gcell.columns:
-            enodeb_ids = df_gcell["eNodeBId"].unique().to_list()
-            st.info(f"**eNodeBId for mapping:** {', '.join(map(str, enodeb_ids))}")
-
-        with st.expander("View GCell Data"):
-            st.dataframe(df_gcell.to_pandas(), width="stretch")
-    else:
-        st.info("No data found in tbl_gcell")
-
-    st.markdown("---")
-
-    # Query 2: SCOT Data
-    st.subheader("2️⃣ SCOT Data")
-    df_scot = results.get("scot")
-    if df_scot is not None and not df_scot.is_empty():
-        st.success(f"✅ Found {len(df_scot):,} records")
-        with st.expander("View SCOT Data"):
-            st.dataframe(df_scot.to_pandas(), width="stretch")
-    else:
-        st.info("No data found in tbl_scot")
-
-    st.markdown("---")
-
-    # Query 3: Mapping Data
-    st.subheader("3️⃣ Mapping Data")
-    df_mapping = results.get("mapping")
-    if df_mapping is not None and not df_mapping.is_empty():
-        st.success(f"✅ Found {len(df_mapping):,} records")
-        with st.expander("View Mapping Data"):
-            st.dataframe(df_mapping.to_pandas(), width="stretch")
-    else:
-        st.info("No data found in tbl_mapping")
-
-    st.markdown("---")
-
-    # Query 4: LTE Hourly Data (NEW eNodeBId MAPPING LOGIC)
-    st.subheader("4️⃣ LTE Hourly Data (via GCell eNodeBId Mapping)")
-    df_lte = results.get("ltehourly")
-    if df_lte is not None and not df_lte.is_empty():
-        st.success(f"✅ Found {len(df_lte):,} records")
-
-        # Show summary stats
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Records", f"{len(df_lte):,}")
-        with col2:
-            st.metric("Total Columns", len(df_lte.columns))
-        with col3:
-            # Show unique eNodeBId jika ada
-            if "eNodeBId" in df_lte.columns:
-                unique_enodeb = df_lte["eNodeBId"].n_unique()
-                st.metric("Unique eNodeBId", unique_enodeb)
-
-        with st.expander("View LTE Hourly Data", expanded=True):
-            st.dataframe(df_lte.to_pandas(), width="stretch", height=400)
-    else:
-        st.warning(f"⚠️ No data found for '{managed_element}' in tbl_ltehourly")
-        # Berikan info tentang mapping
-        if (
-            df_gcell is not None
-            and not df_gcell.is_empty()
-            and "eNodeBId" in df_gcell.columns
-        ):
-            enodeb_ids = df_gcell["eNodeBId"].unique().to_list()
-            st.info(
-                f"💡 GCell has eNodeBId: {enodeb_ids}, but no matching LTE Hourly data found"
-            )
-
-    st.markdown("---")
-
-    # Query 5: 2G Hourly Data
-    st.subheader("5️⃣ 2G Hourly Data")
-    df_2g = results.get("twoghourly")
-    if df_2g is not None and not df_2g.is_empty():
-        st.success(f"✅ Found {len(df_2g):,} records")
-        with st.expander("View 2G Hourly Data"):
-            st.dataframe(df_2g.to_pandas(), width="stretch", height=300)
-    else:
-        if df_mapping is None or df_mapping.is_empty():
-            st.warning("⚠️ No mapping found, skipping 2G Hourly query")
-        else:
-            st.info("No data found in tbl_twoghourly")
-
-    st.markdown("---")
-
-    # Query 6: Merged GCell Coverage Data
-    st.subheader("6️⃣ GCell Coverage (Merged Data)")
-    df_coverage = results.get("gcell_coverage")
+                st.metric("Avg TA90 Value", f"{avg_ta:.2f}" if avg_ta is not None else "N/A")
+    
     if df_coverage is not None and not df_coverage.is_empty():
-        st.success(f"✅ Found {len(df_coverage):,} merged records")
-
-        # Show key merged columns summary
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             if "TA90" in df_coverage.columns:
                 avg_ta90 = df_coverage["TA90"].mean()
-                st.metric(
-                    "Avg TA90", f"{avg_ta90:.2f}" if avg_ta90 is not None else "N/A"
-                )
+                st.metric("Avg TA90", f"{avg_ta90:.2f}" if avg_ta90 is not None else "N/A")
         with col2:
             if "Min of S2S Distance" in df_coverage.columns:
                 avg_distance = df_coverage["Min of S2S Distance"].mean()
@@ -257,78 +181,138 @@ def _render_query_results(results: dict, managed_element: str):
         with col3:
             st.metric("Total Columns", len(df_coverage.columns))
         with col4:
-            st.metric(
-                "Unique Cells",
-                df_coverage["CellName"].n_unique()
-                if "CellName" in df_coverage.columns
-                else 0,
-            )
+            unique_cells = df_coverage["CellName"].n_unique() if "CellName" in df_coverage.columns else 0
+            st.metric("Unique Cells", unique_cells)
 
-        with st.expander("View GCell Coverage Data", expanded=True):
-            st.dataframe(df_coverage.to_pandas(), width="stretch", height=400)
-    else:
-        st.warning(
-            "⚠️ No merged GCell Coverage data available (requires GCell, Timing Advance, and SCOT data)"
-        )
 
+def _styled_table(df):
+    """Render table dengan styling yang konsisten untuk SCOT data"""
+    st.markdown("""
+        <style>
+        .small-table table {
+            font-size: 12px !important;
+            width: 100% !important;
+        }
+        .small-table thead th {
+            background-color: #1f77b4 !important;
+            color: white !important;
+            font-weight: bold !important;
+            font-size: 11px !important;
+            padding: 8px 4px !important;
+        }
+        .small-table tbody td {
+            padding: 6px 4px !important;
+            font-size: 11px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    pandas_df = df.to_pandas()
+    
+    st.dataframe(
+        pandas_df,
+        width='stretch',
+        hide_index=True,
+        height=min(400, 35 * len(pandas_df) + 38)
+    )
+
+
+def _render_summary_section(results: dict):
+    """Render summary section dengan styling"""
+    tables = {
+        "LTE Timing Advance (Augmented)": "timingadvance",
+        "LTE Timing Advance (Original)": "timingadvance_original",
+        "GCell": "gcell",
+        "SCOT": "scot",
+        "Mapping": "mapping",
+        "LTE Hourly": "ltehourly",
+        "2G Hourly": "twoghourly",
+        "GCell Coverage": "gcell_coverage"
+    }
+    
+    summary_data = []
+    for table_name, results_key in tables.items():
+        df = results.get(results_key)
+        record_count = len(df) if df is not None and not df.is_empty() else 0
+        status = "✅ Found" if record_count > 0 else "❌ Empty"
+        summary_data.append({"Table": table_name, "Records Found": record_count, "Status": status})
+    
+    summary_df = pd.DataFrame(summary_data)
+    st.markdown("""
+        <style>
+        .summary-table table {
+            font-size: 8px !important;
+        }
+        .summary-table thead th {
+            background-color: #2E86AB !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.dataframe(summary_df, width='stretch', hide_index=True)
+
+
+def _render_query_results(results: dict, managed_element: str):
+    """Render all query results in organized sections"""
+    st.markdown("""
+        <style>
+        /* Global table styling */
+        .stDataFrame table {
+            font-size: 8px !important;
+        }
+        .stDataFrame thead th {
+            background-color: #1f77b4 !important;
+            color: white !important;
+            font-weight: bold !important;
+            font-size: 8px !important;
+        }
+        .stDataFrame tbody td {
+            font-size: 8px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("### 🌎 Map Overview")
+        render_coverage_map(results)
+        st.markdown("##### 📋 SCOT Data")
+        df_scot_non_augmented = _get_scot_non_augmented(results, managed_element)
+        if df_scot_non_augmented is not None:
+            _styled_table(df_scot_non_augmented)
+        else:
+            st.info("OPEN AREA")
+    
+    with col2:
+        st.markdown("### 📍 TA Distributions")
+        _render_ta_distribution_section(results, managed_element)
+
+    # Data sections
+    sections = [
+        ("🔄 LTE Timing Advance Data (Augmented)", "timingadvance", False),
+        ("🔄 LTE Timing Advance Data (Non-Augmented)", "timingadvance_original", False),
+        ("1️⃣ GCell Data", "gcell", False),
+        ("2️⃣ SCOT Data (Full)", "scot", False),  # Full SCOT data (augmented)
+        ("3️⃣ Mapping Data", "mapping", False),
+        ("4️⃣ LTE Hourly Data", "ltehourly", True),
+        ("5️⃣ 2G Hourly Data", "twoghourly", False),
+        ("6️⃣ GCell Coverage Data", "gcell_coverage", True),
+    ]
+    
+    for title, key, expanded in sections:
+        st.markdown("---")
+        st.subheader(title)
+        _render_data_section(title, key, results, expanded)
+    
+    # Metrics section
+    st.markdown("---")
+    st.subheader("📊 Key Metrics")
+    _render_metrics_section(results)
+    
     # Summary section
     st.markdown("---")
     st.subheader("📈 Summary")
-
-    summary_data = {
-        "Table": [
-            "LTE Timing Advance (Augmented)",
-            "LTE Timing Advance (Original)",
-            "GCell",
-            "SCOT",
-            "Mapping",
-            "LTE Hourly",
-            "2G Hourly",
-            "GCell Coverage",
-        ],
-        "Records Found": [
-            len(df_timingadvance)
-            if df_timingadvance is not None and not df_timingadvance.is_empty()
-            else 0,
-            len(df_timingadvance_original)
-            if df_timingadvance_original is not None and not df_timingadvance_original.is_empty()
-            else 0,
-            len(df_gcell) if df_gcell is not None and not df_gcell.is_empty() else 0,
-            len(df_scot) if df_scot is not None and not df_scot.is_empty() else 0,
-            len(df_mapping)
-            if df_mapping is not None and not df_mapping.is_empty()
-            else 0,
-            len(df_lte) if df_lte is not None and not df_lte.is_empty() else 0,
-            len(df_2g) if df_2g is not None and not df_2g.is_empty() else 0,
-            len(df_coverage)
-            if df_coverage is not None and not df_coverage.is_empty()
-            else 0,
-        ],
-        "Status": [
-            "✅ Found"
-            if df_timingadvance is not None and not df_timingadvance.is_empty()
-            else "❌ Empty",
-            "✅ Found"
-            if df_timingadvance_original is not None and not df_timingadvance_original.is_empty()
-            else "❌ Empty",
-            "✅ Found"
-            if df_gcell is not None and not df_gcell.is_empty()
-            else "❌ Empty",
-            "✅ Found"
-            if df_scot is not None and not df_scot.is_empty()
-            else "❌ Empty",
-            "✅ Found"
-            if df_mapping is not None and not df_mapping.is_empty()
-            else "❌ Empty",
-            "✅ Found" if df_lte is not None and not df_lte.is_empty() else "❌ Empty",
-            "✅ Found" if df_2g is not None and not df_2g.is_empty() else "❌ Empty",
-            "✅ Found"
-            if df_coverage is not None and not df_coverage.is_empty()
-            else "❌ Empty",
-        ],
-    }
-
-    import pandas as pd
-
-    summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, width="stretch", hide_index=True)
+    _render_summary_section(results)
