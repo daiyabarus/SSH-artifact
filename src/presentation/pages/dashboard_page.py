@@ -1,11 +1,12 @@
 """
 Dashboard page - Data visualization and analytics
-Clean and effective version
+Clean and effective version with Date Range filter
 """
 
 import streamlit as st
 import polars as pl
 import pandas as pd
+from datetime import datetime, timedelta
 from src.infrastructure.database.repository import DatabaseRepository
 from src.application.services.dashboard_service import DashboardService
 from src.application.services.coverage_map_service import render_coverage_map
@@ -28,6 +29,7 @@ def render():
         st.warning("⚠️ No data available in Timing Advance table. Please import data first.")
         return
 
+    # Filter 1: Select TOWERID
     selected_element = st.sidebar.selectbox(
         "TOWERID",
         options=["All"] + managed_elements,
@@ -35,16 +37,57 @@ def render():
         help="Filter data by Managed Element",
     )
 
+    # Filter 2: Date Range for Hourly Data
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📅 Date Range for Hourly Data")
+    
+    col1, col2 = st.sidebar.columns(2)
+    
+    with col1:
+        # Default: 7 days ago
+        default_start = datetime.now() - timedelta(days=7)
+        start_date = st.date_input(
+            "Start Date",
+            value=default_start,
+            help="Start date for LTE and 2G Hourly data"
+        )
+    
+    with col2:
+        # Default: today
+        default_end = datetime.now()
+        end_date = st.date_input(
+            "End Date",
+            value=default_end,
+            help="End date for LTE and 2G Hourly data"
+        )
+    
+    # Validate date range
+    if start_date > end_date:
+        st.sidebar.error("❌ Start date must be before end date")
+        return
+    
+    # Convert date to datetime
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    # Show selected date range
+    date_range_days = (end_date - start_date).days + 1
+    st.sidebar.info(f"📊 Selected range: **{date_range_days} days**")
+
     run_query = st.sidebar.button("▶️ Run Query", type="primary")
 
     if run_query and selected_element != "All":
         with st.spinner("Running queries..."):
-            results = dashboard_service.execute_all_queries(selected_element)
-            _render_query_results(results, selected_element)
+            results = dashboard_service.execute_all_queries(
+                selected_element,
+                start_date=start_datetime,
+                end_date=end_datetime
+            )
+            _render_query_results(results, selected_element, start_datetime, end_datetime)
     elif run_query:
         st.warning("⚠️ Please select a specific Managed Element to run queries")
     else:
-        st.info("ℹ️ Select a Managed Element and click 'Run Query' to start analysis")
+        st.info("ℹ️ Select a Managed Element and date range, then click 'Run Query' to start analysis")
 
 
 def _get_scot_non_augmented(results: dict, managed_element: str):
@@ -135,7 +178,8 @@ def _styled_dataframe(df, height: int = 400):
 
 def _render_data_section(title: str, results_key: str, results: dict, 
                         expanded: bool = False, height: int = 400,
-                        show_metrics: bool = False):
+                        show_metrics: bool = False, 
+                        start_date: datetime = None, end_date: datetime = None):
     """Render a standardized data section"""
     df = results.get(results_key)
     
@@ -143,11 +187,16 @@ def _render_data_section(title: str, results_key: str, results: dict,
         st.info(f"No data found in {results_key}")
         return
     
-    st.success(f"✅ Found {len(df):,} records")
+    # Show date range info for hourly data
+    if results_key in ["ltehourly", "twoghourly"] and start_date and end_date:
+        st.success(f"✅ Found {len(df):,} records from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+    else:
+        st.success(f"✅ Found {len(df):,} records")
     
-    if results_key == "gcell" and "eNodeBId" in df.columns:
+    # Show eNodeBId info for Timing Advance
+    if results_key == "timingadvance" and "eNodeBId" in df.columns:
         enodeb_ids = df["eNodeBId"].unique().to_list()
-        st.info(f"**eNodeBId for mapping:** {', '.join(map(str, enodeb_ids))}")
+        st.info(f"**eNodeBId for LTE Hourly mapping:** {', '.join(map(str, enodeb_ids[:5]))}{'...' if len(enodeb_ids) > 5 else ''}")
     
     with st.expander(f"View {title}", expanded=expanded):
         _styled_dataframe(df.to_pandas(), height)
@@ -217,7 +266,7 @@ def _styled_table(df):
     )
 
 
-def _render_summary_section(results: dict):
+def _render_summary_section(results: dict, start_date: datetime, end_date: datetime):
     """Render summary section dengan styling"""
     tables = {
         "LTE Timing Advance (Augmented)": "timingadvance",
@@ -226,6 +275,7 @@ def _render_summary_section(results: dict):
         "SCOT": "scot",
         "Mapping": "mapping",
         "LTE Hourly": "ltehourly",
+        "LTE Hourly Combined": "ltehourly_combined",
         "2G Hourly": "twoghourly",
         "GCell Coverage": "gcell_coverage"
     }
@@ -235,6 +285,12 @@ def _render_summary_section(results: dict):
         df = results.get(results_key)
         record_count = len(df) if df is not None and not df.is_empty() else 0
         status = "✅ Found" if record_count > 0 else "❌ Empty"
+        
+        # Add date range info for hourly data
+        if results_key in ["ltehourly", "ltehourly_combined", "twoghourly"] and record_count > 0:
+            date_info = f" ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')})"
+            table_name += date_info
+        
         summary_data.append({"Table": table_name, "Records Found": record_count, "Status": status})
     
     summary_df = pd.DataFrame(summary_data)
@@ -254,7 +310,7 @@ def _render_summary_section(results: dict):
     st.dataframe(summary_df, width='stretch', hide_index=True)
 
 
-def _render_query_results(results: dict, managed_element: str):
+def _render_query_results(results: dict, managed_element: str, start_date: datetime, end_date: datetime):
     """Render all query results in organized sections"""
     st.markdown("""
         <style>
@@ -298,6 +354,7 @@ def _render_query_results(results: dict, managed_element: str):
         ("2️⃣ SCOT Data (Full)", "scot", False),  # Full SCOT data (augmented)
         ("3️⃣ Mapping Data", "mapping", False),
         ("4️⃣ LTE Hourly Data", "ltehourly", True),
+        ("4️⃣b LTE Hourly Combined (with TA)", "ltehourly_combined", True),
         ("5️⃣ 2G Hourly Data", "twoghourly", False),
         ("6️⃣ GCell Coverage Data", "gcell_coverage", True),
     ]
@@ -305,7 +362,8 @@ def _render_query_results(results: dict, managed_element: str):
     for title, key, expanded in sections:
         st.markdown("---")
         st.subheader(title)
-        _render_data_section(title, key, results, expanded)
+        _render_data_section(title, key, results, expanded, 
+                           start_date=start_date, end_date=end_date)
     
     # Metrics section
     st.markdown("---")
@@ -315,4 +373,4 @@ def _render_query_results(results: dict, managed_element: str):
     # Summary section
     st.markdown("---")
     st.subheader("📈 Summary")
-    _render_summary_section(results)
+    _render_summary_section(results, start_date, end_date)
