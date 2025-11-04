@@ -274,8 +274,8 @@ class DashboardService:
                 if "Cell_PI-1" in df_scot.columns and "Min of S2S Distance" in df_scot.columns:
                     df_scot_join = df_scot.select([
                         pl.col("Cell_PI-1").cast(pl.Utf8).alias("CellName"),
-                        pl.col("Min of S2S Distance").cast(pl.Float64),
-                        pl.col("New FINAL Remark COSTv3.0T").alias("SCOT Remark"),
+                        pl.col("Min of S2S Distance").cast(pl.Utf8),
+                        pl.col("FINAL Remark COSTv2.0T").alias("SCOT Remark"),
                         pl.col("NCELL SiteID").alias("1st Tier"),
                     ])
                     df_coverage = df_coverage.join(df_scot_join, on="CellName", how="left")

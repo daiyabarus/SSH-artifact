@@ -37,12 +37,11 @@ def render():
         help="Filter data by Managed Element",
     )
 
-    # Filter 2: Date Range for Hourly Data
     st.sidebar.markdown("---")
     st.sidebar.subheader("📅 Date Range for Hourly Data")
-    
+
     col1, col2 = st.sidebar.columns(2)
-    
+
     with col1:
         # Default: 7 days ago
         default_start = datetime.now() - timedelta(days=7)
@@ -51,7 +50,7 @@ def render():
             value=default_start,
             help="Start date for LTE and 2G Hourly data"
         )
-    
+
     with col2:
         # Default: today
         default_end = datetime.now()
@@ -60,16 +59,16 @@ def render():
             value=default_end,
             help="End date for LTE and 2G Hourly data"
         )
-    
+
     # Validate date range
     if start_date > end_date:
         st.sidebar.error("❌ Start date must be before end date")
         return
-    
+
     # Convert date to datetime
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
-    
+
     # Show selected date range
     date_range_days = (end_date - start_date).days + 1
     st.sidebar.info(f"📊 Selected range: **{date_range_days} days**")
@@ -108,7 +107,7 @@ def _get_scot_non_augmented(results: dict, managed_element: str):
     target_columns = [
         "SiteID", "Sectorid_v2", "TAPC90", 
         "Cell_PI-1", "NCELL SiteID", "Min of S2S Distance", 
-        "New FINAL Remark COSTv3.0T", "Additional Tilt Recommendation"
+        "FINAL Remark COSTv2.0T", "Additional Tilt Recommendation"
     ]
     
     available_columns = [col for col in target_columns if col in df_non_augmented.columns]
@@ -224,9 +223,10 @@ def _render_metrics_section(results: dict):
                 avg_ta90 = df_coverage["TA90"].mean()
                 st.metric("Avg TA90", f"{avg_ta90:.2f}" if avg_ta90 is not None else "N/A")
         with col2:
-            if "Min of S2S Distance" in df_coverage.columns:
-                avg_distance = df_coverage["Min of S2S Distance"].mean()
-                st.metric("Avg S2S Distance", f"{avg_distance:.2f}")
+            st.markdown("")
+            # if "Min of S2S Distance" in df_coverage.columns:
+                # avg_distance = df_coverage["Min of S2S Distance"].mean()
+                # st.metric("Avg S2S Distance", f"{avg_distance:.2f}")
         with col3:
             st.metric("Total Columns", len(df_coverage.columns))
         with col4:
