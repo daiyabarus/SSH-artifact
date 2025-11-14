@@ -29,15 +29,15 @@ class DashboardService:
             raise Exception(f"Error fetching Managed Elements: {str(e)}")
 
     def execute_all_queries(
-        self, 
+        self,
         managed_element: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
     ) -> Dict[str, Optional[pl.DataFrame]]:
         """
         Execute all queries for a given Managed Element
         Returns dictionary with query results
-        
+
         Args:
             managed_element: The Managed Element to query
             start_date: Start date for hourly data (optional)
@@ -54,7 +54,9 @@ class DashboardService:
         )
 
         # Query: LTE Timing Advance - original
-        results["timingadvance_original"] = self._query_timingadvance_original(managed_element)
+        results["timingadvance_original"] = self._query_timingadvance_original(
+            managed_element
+        )
 
         # Query: GCell - augmented
         results["gcell"] = self._query_gcell_augmented(managed_element, results["scot"])
@@ -64,18 +66,21 @@ class DashboardService:
 
         # Query: LTE Hourly
         if start_date and end_date:
-            enodeb_ids = self._hourly_service.get_enodeb_ids_from_timingadvance(managed_element)
+            enodeb_ids = self._hourly_service.get_enodeb_ids_from_timingadvance(
+                managed_element
+            )
             results["ltehourly"] = self._hourly_service.query_ltehourly_by_daterange(
                 enodeb_ids, start_date, end_date
             )
         else:
-            enodeb_ids = self._hourly_service.get_enodeb_ids_from_timingadvance(managed_element)
+            enodeb_ids = self._hourly_service.get_enodeb_ids_from_timingadvance(
+                managed_element
+            )
             results["ltehourly"] = self._query_ltehourly_fallback(enodeb_ids)
 
         # Query: LTE Hourly Combined
         results["ltehourly_combined"] = self._hourly_service.get_combined_ltehourly(
-            results.get("ltehourly"),
-            results.get("timingadvance")
+            results.get("ltehourly"), results.get("timingadvance")
         )
 
         # Query: 2G Hourly
@@ -86,8 +91,10 @@ class DashboardService:
                 else []
             )
             if start_date and end_date:
-                results["twoghourly"] = self._hourly_service.query_twoghourly_by_daterange(
-                    site_names, start_date, end_date
+                results["twoghourly"] = (
+                    self._hourly_service.query_twoghourly_by_daterange(
+                        site_names, start_date, end_date
+                    )
                 )
             else:
                 results["twoghourly"] = self._query_twoghourly_fallback(site_names)
@@ -130,7 +137,9 @@ class DashboardService:
             print(f"Error querying augmented Timing Advance: {str(e)}")
             return self._query_timingadvance_original(managed_element)
 
-    def _query_timingadvance_original(self, managed_element: str) -> Optional[pl.DataFrame]:
+    def _query_timingadvance_original(
+        self, managed_element: str
+    ) -> Optional[pl.DataFrame]:
         """Original Timing Advance query"""
         try:
             query = f"SELECT * FROM tbl_timingadvance WHERE \"Managed Element\" = '{managed_element}'"
@@ -192,12 +201,14 @@ class DashboardService:
             print(f"Error querying Mapping: {str(e)}")
             return None
 
-    def _query_ltehourly_fallback(self, enodeb_ids: List[str]) -> Optional[pl.DataFrame]:
+    def _query_ltehourly_fallback(
+        self, enodeb_ids: List[str]
+    ) -> Optional[pl.DataFrame]:
         """Fallback LTE Hourly query without date range"""
         try:
             if not enodeb_ids:
                 return None
-            
+
             valid_enodeb_ids = []
             for enodeb_id in enodeb_ids:
                 if not enodeb_id:
@@ -225,7 +236,9 @@ class DashboardService:
             print(f"Error in LTE Hourly fallback: {str(e)}")
             return None
 
-    def _query_twoghourly_fallback(self, site_names: List[str]) -> Optional[pl.DataFrame]:
+    def _query_twoghourly_fallback(
+        self, site_names: List[str]
+    ) -> Optional[pl.DataFrame]:
         """Fallback 2G Hourly query without date range"""
         try:
             if not site_names:
@@ -263,27 +276,39 @@ class DashboardService:
             # Join with Timing Advance
             if df_timing is not None and not df_timing.is_empty():
                 if "Eutrancell" in df_timing.columns and "TA90" in df_timing.columns:
-                    timing_join = df_timing.select([
-                        pl.col("Eutrancell").cast(pl.Utf8).alias("CellName"),
-                        pl.col("TA90").cast(pl.Float64, strict=False).alias("TA90"),
-                    ])
-                    df_coverage = df_coverage.join(timing_join, on="CellName", how="left")
+                    timing_join = df_timing.select(
+                        [
+                            pl.col("Eutrancell").cast(pl.Utf8).alias("CellName"),
+                            pl.col("TA90").cast(pl.Float64, strict=False).alias("TA90"),
+                        ]
+                    )
+                    df_coverage = df_coverage.join(
+                        timing_join, on="CellName", how="left"
+                    )
 
             # Join with SCOT
             if df_scot is not None and not df_scot.is_empty():
-                if "Cell_PI-1" in df_scot.columns and "Min of S2S Distance" in df_scot.columns:
-                    df_scot_join = df_scot.select([
-                        pl.col("Cell_PI-1").cast(pl.Utf8).alias("CellName"),
-                        pl.col("Min of S2S Distance").cast(pl.Utf8),
-                        pl.col("FINAL Remark COSTv2.0T").alias("SCOT Remark"),
-                        pl.col("NCELL SiteID").alias("1st Tier"),
-                    ])
-                    df_coverage = df_coverage.join(df_scot_join, on="CellName", how="left")
-                    
+                if (
+                    "Cell_PI-1" in df_scot.columns
+                    and "Min of S2S Distance" in df_scot.columns
+                ):
+                    df_scot_join = df_scot.select(
+                        [
+                            pl.col("Cell_PI-1").cast(pl.Utf8).alias("CellName"),
+                            pl.col("Min of S2S Distance").cast(pl.Utf8),
+                            pl.col("FINAL Remark COSTv2.0T").alias("SCOT Remark"),
+                            pl.col("NCELL SiteID").alias("1st Tier"),
+                        ]
+                    )
+                    df_coverage = df_coverage.join(
+                        df_scot_join, on="CellName", how="left"
+                    )
+
                     if "Min of S2S Distance" in df_coverage.columns:
                         df_coverage = df_coverage.with_columns(
-                            pl.coalesce([pl.col("Min of S2S Distance"), pl.lit(0.0)])
-                            .alias("Min of S2S Distance")
+                            pl.coalesce(
+                                [pl.col("Min of S2S Distance"), pl.lit(0.0)]
+                            ).alias("Min of S2S Distance")
                         )
 
             return df_coverage

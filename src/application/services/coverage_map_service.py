@@ -24,17 +24,16 @@ class CoverageMapVisualization:
         """Initialize Folium map centered on cells"""
         try:
             valid_cells = df_coverage.filter(
-                (pl.col("Latitude").is_not_null()) & 
-                (pl.col("Longitude").is_not_null())
+                (pl.col("Latitude").is_not_null()) & (pl.col("Longitude").is_not_null())
             )
-            
+
             if valid_cells.is_empty():
                 self.map_center = (0, 0)
             else:
                 lat_mean = valid_cells["Latitude"].mean()
                 lon_mean = valid_cells["Longitude"].mean()
                 self.map_center = (lat_mean, lon_mean)
-                
+
         except Exception:
             self.map_center = (0, 0)
 
@@ -57,20 +56,37 @@ class CoverageMapVisualization:
         """Assign different colors for each unique CellName"""
         cell_names = df["CellName"].unique().to_list()
         unique_cell_names = [str(name) for name in cell_names if name]
-        
+
         cell_colors = [
-            "#E74C3C", "#3498DB", "#2ECC71", "#F39C12", "#9B59B6",
-            "#1ABC9C", "#E67E22", "#34495E", "#E91E63", "#FF5722",
-            "#00BCD4", "#8BC34A", "#FFC107", "#795548", "#607D8B",
-            "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"
+            "#E74C3C",
+            "#3498DB",
+            "#2ECC71",
+            "#F39C12",
+            "#D4C32A",
+            "#1ABC9C",
+            "#E67E22",
+            "#DB1248",
+            "#E91E63",
+            "#FF5722",
+            "#00BCD4",
+            "#8BC34A",
+            "#FFC107",
+            "#795548",
+            "#0FEF2D",
+            "#FF6B6B",
+            "#4ECDC4",
+            "#45B7D1",
+            "#96CEB4",
+            "#FFEAA7",
         ]
-        
+
         self.cell_colors = {}
         for i, cell_name in enumerate(unique_cell_names):
             if i < len(cell_colors):
                 self.cell_colors[cell_name] = cell_colors[i]
             else:
                 import hashlib
+
                 color_hex = hashlib.md5(cell_name.encode()).hexdigest()[:6]
                 self.cell_colors[cell_name] = f"#{color_hex}"
 
@@ -86,8 +102,7 @@ class CoverageMapVisualization:
             return
 
         df_valid = df_coverage.filter(
-            (pl.col("Latitude").is_not_null()) & 
-            (pl.col("Longitude").is_not_null())
+            (pl.col("Latitude").is_not_null()) & (pl.col("Longitude").is_not_null())
         )
 
         self.assign_cell_colors(df_valid)
@@ -111,7 +126,7 @@ class CoverageMapVisualization:
                 beam = row.get("Beam", 65)
                 ant_size = row.get("Ant-Size", 0.1)
                 msc_name = row["MSC"]
-                
+
                 coverage_km = ant_size
                 if coverage_km <= 0:
                     continue
@@ -142,10 +157,12 @@ class CoverageMapVisualization:
                     fill_color=color,
                     fill_opacity=1.0,
                     popup=folium.Popup(popup_html, max_width=300),
-                    tooltip=f"Beam: {coverage_km:.3f} km ({cell_name})"
+                    tooltip=f"Beam: {coverage_km:.3f} km ({cell_name})",
                 ).add_to(layer)
 
-                self._add_cell_marker_with_label(lat, lon, cell_name, msc_name, color, layer)
+                self._add_cell_marker_with_label(
+                    lat, lon, cell_name, msc_name, color, layer
+                )
 
             except Exception:
                 continue
@@ -156,10 +173,7 @@ class CoverageMapVisualization:
         """STEP 2: Draw TA90 coverage using TA90 as radius"""
         layer = folium.FeatureGroup(name="📊 TA90 Coverage", show=True)
 
-        ta90_cells = df.filter(
-            (pl.col("TA90").is_not_null()) & 
-            (pl.col("TA90") > 0)
-        )
+        ta90_cells = df.filter((pl.col("TA90").is_not_null()) & (pl.col("TA90") > 0))
 
         if ta90_cells.is_empty():
             return
@@ -174,7 +188,7 @@ class CoverageMapVisualization:
                 beam = row.get("Beam", 65)
                 ta90_value = row.get("TA90", 0)
                 msc_name = row["MSC"]
-                
+
                 coverage_km = ta90_value
                 if coverage_km <= 0:
                     continue
@@ -203,7 +217,7 @@ class CoverageMapVisualization:
                     fill_color=color,
                     fill_opacity=0.2,
                     popup=folium.Popup(popup_html, max_width=300),
-                    tooltip=f"TA90: {coverage_km:.3f} km ({cell_name})"
+                    tooltip=f"TA90: {coverage_km:.3f} km ({cell_name})",
                 ).add_to(layer)
 
             except Exception:
@@ -216,9 +230,9 @@ class CoverageMapVisualization:
         layer = folium.FeatureGroup(name="🔗 ISD", show=True)
 
         tier1_connections = df.filter(
-            (pl.col("1st Tier").is_not_null()) & 
-            (pl.col("1st Tier") != "") &
-            (pl.col("1st Tier") != "1st Tier")
+            (pl.col("1st Tier").is_not_null())
+            & (pl.col("1st Tier") != "")
+            & (pl.col("1st Tier") != "1st Tier")
         )
 
         if tier1_connections.is_empty():
@@ -227,23 +241,23 @@ class CoverageMapVisualization:
         for source_row in tier1_connections.iter_rows(named=True):
             source_cell = source_row["CellName"]
             tier1_site = source_row["1st Tier"]
-            
+
             target_cells = df.filter(pl.col("MSC") == tier1_site)
-            
+
             if not target_cells.is_empty():
                 target_row = target_cells.row(0, named=True)
-                
+
                 try:
                     lat1, lon1 = source_row["Latitude"], source_row["Longitude"]
                     lat2, lon2 = target_row["Latitude"], target_row["Longitude"]
-                    
+
                     offset = 0.00036
                     mid_lat = (lat1 + lat2) / 2 + offset
                     mid_lon = (lon1 + lon2) / 2 + offset
-                    
+
                     line_coords = [(lat1, lon1), (mid_lat, mid_lon), (lat2, lon2)]
                     distance_km = self._calculate_distance(lat1, lon1, lat2, lon2)
-                    
+
                     popup_html = f"""
                     <div style='font-family: Arial; font-size: 12px;'>
                         <b>🔗 Tier1 Connection</b><br>
@@ -261,16 +275,17 @@ class CoverageMapVisualization:
                         dash_array="10, 5, 2, 5",
                         popup=folium.Popup(popup_html, max_width=300),
                     ).add_to(layer)
-                    
+
                     self._add_distance_label(mid_lat, mid_lon, distance_km, layer)
-                    
+
                 except Exception:
                     continue
 
         layer.add_to(self.map)
 
-    def _add_cell_marker_with_label(self, lat: float, lon: float, cell_name: str, 
-                                  msc_name: str, color: str, layer):
+    def _add_cell_marker_with_label(
+        self, lat: float, lon: float, cell_name: str, msc_name: str, color: str, layer
+    ):
         """Add cell marker dengan MSC label"""
         popup_html = f"""
         <div style='font-family: Arial; font-size: 12px; min-width: 200px;'>
@@ -316,7 +331,7 @@ class CoverageMapVisualization:
                 icon_size=(None, None),
                 icon_anchor=(0, 0),
             ),
-            tooltip=msc_name
+            tooltip=msc_name,
         ).add_to(layer)
 
     def _add_distance_label(self, lat: float, lon: float, distance_km: float, layer):
@@ -343,40 +358,47 @@ class CoverageMapVisualization:
                 icon_size=(None, None),
                 icon_anchor=(0, 0),
             ),
-            tooltip=f"Distance: {distance_km:.1f} km"
+            tooltip=f"Distance: {distance_km:.1f} km",
         ).add_to(layer)
 
-    def _create_sector_polygon(self, lat: float, lon: float, direction: float, 
-                              beam: float, radius_km: float) -> List[Tuple[float, float]]:
+    def _create_sector_polygon(
+        self, lat: float, lon: float, direction: float, beam: float, radius_km: float
+    ) -> List[Tuple[float, float]]:
         """Create sector polygon coordinates for coverage area"""
         points = [(lat, lon)]
-        
+
         start_angle = direction - beam / 2
         end_angle = direction + beam / 2
-        
+
         for angle in range(int(start_angle), int(end_angle) + 1, 2):
             angle_rad = math.radians(angle)
             delta_lat = radius_km * math.cos(angle_rad) / 111.0
-            delta_lon = radius_km * math.sin(angle_rad) / (111.0 * math.cos(math.radians(lat)))
-            
+            delta_lon = (
+                radius_km * math.sin(angle_rad) / (111.0 * math.cos(math.radians(lat)))
+            )
+
             point_lat = lat + delta_lat
             point_lon = lon + delta_lon
             points.append((point_lat, point_lon))
-        
+
         points.append((lat, lon))
         return points
 
-    def _calculate_distance(self, lat1: float, lon1: float, 
-                           lat2: float, lon2: float) -> float:
+    def _calculate_distance(
+        self, lat1: float, lon1: float, lat2: float, lon2: float
+    ) -> float:
         """Calculate distance between two points in km"""
         R = 6371
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
-        
-        a = (math.sin(dlat / 2) ** 2 + 
-             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * 
-             math.sin(dlon / 2) ** 2)
-        
+
+        a = (
+            math.sin(dlat / 2) ** 2
+            + math.cos(math.radians(lat1))
+            * math.cos(math.radians(lat2))
+            * math.sin(dlon / 2) ** 2
+        )
+
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
 
@@ -384,30 +406,34 @@ class CoverageMapVisualization:
         """Add custom legend for cell names and colors"""
         if not self.cell_colors:
             return
-            
-        legend_html = '''
+
+        legend_html = """
         <div style="position: fixed; 
                     bottom: 50px; left: 50px; width: 200px; 
                     background-color: white; z-index:1000; 
                     border: 2px solid grey; padding: 10px; 
                     font-size: 12px; font-family: Arial;">
             <h4 style="margin: 0 0 8px 0;">Cell Legend</h4>
-        '''
-        
-        for cell_name, color in list(self.cell_colors.items())[:10]:  # Limit to first 10
-            legend_html += f'''
+        """
+
+        for cell_name, color in list(self.cell_colors.items())[
+            :10
+        ]:  # Limit to first 10
+            legend_html += f"""
             <div style="display: flex; align-items: center; margin-bottom: 4px;">
                 <div style="background-color: {color}; width: 16px; height: 16px; 
                          border: 1px solid grey; margin-right: 8px;"></div>
                 <span style="overflow: hidden; text-overflow: ellipsis;">{cell_name}</span>
             </div>
-            '''
-        
+            """
+
         if len(self.cell_colors) > 10:
-            legend_html += f'<div style="color: #666;">+ {len(self.cell_colors) - 10} more</div>'
-        
-        legend_html += '</div>'
-        
+            legend_html += (
+                f'<div style="color: #666;">+ {len(self.cell_colors) - 10} more</div>'
+            )
+
+        legend_html += "</div>"
+
         legend = MacroElement()
         legend._template = Template(legend_html)
         self.map.get_root().add_child(legend)
@@ -416,7 +442,7 @@ class CoverageMapVisualization:
         """Display map in Streamlit"""
         self._add_cell_legend()
         folium.LayerControl(position="topright", collapsed=False).add_to(self.map)
-        
+
         try:
             Fullscreen().add_to(self.map)
         except Exception:
@@ -428,11 +454,11 @@ class CoverageMapVisualization:
 def render_coverage_map_3step(results: dict):
     """Render coverage map with 3-step approach from dashboard results"""
     df_coverage = results.get("gcell_coverage")
-    
+
     if df_coverage is None or df_coverage.is_empty():
         st.warning("⚠️ No coverage data available. GCell Coverage merge required.")
         return
-    
+
     with st.spinner("Generating 3-step coverage map..."):
         viz = CoverageMapVisualization()
         viz.initialize_map(df_coverage)

@@ -1,0 +1,16 @@
+-- database: ./newdatabase.db
+
+SELECT * FROM tbl_newbh;
+WITH duplicates AS (
+    SELECT 
+        rowid,
+        ROW_NUMBER() OVER (
+            PARTITION BY newbh_date, newbh_moentity, newbh_cell_fdd_band
+            ORDER BY rowid
+        ) AS rn
+    FROM tbl_newbh
+)
+DELETE FROM tbl_newbh
+WHERE rowid IN (
+    SELECT rowid FROM duplicates WHERE rn > 1
+);

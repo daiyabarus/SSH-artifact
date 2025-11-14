@@ -212,3 +212,5 @@ __marimo__/
 *.exe
 *.zip
 mydatabase.db
+newdatabase.db
+newdatabase.sl3

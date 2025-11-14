@@ -1,0 +1,18 @@
+-- database: ./newdatabase.db
+
+SELECT * FROM tbl_newwd
+ORDER BY `newwd_date` DESC;
+
+WITH duplicates AS (
+    SELECT 
+        rowid,
+        ROW_NUMBER() OVER (
+            PARTITION BY newwd_date, newwd_moentity, newwd_cell_fdd_band
+            ORDER BY rowid
+        ) AS rn
+    FROM tbl_newwd
+)
+DELETE FROM tbl_newwd
+WHERE rowid IN (
+    SELECT rowid FROM duplicates WHERE rn > 1
+);

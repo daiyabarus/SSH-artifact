@@ -26,7 +26,7 @@ class TADistributionVisualizer:
 
     # Band-specific colors untuk bars dan CDF
     BAND_COLORS = {
-        850: "#3498DB",   # Blue
+        850: "#3498DB",  # Blue
         1800: "#E74C3C",  # Red
         2100: "#2ECC71",  # Green
         2300: "#F39C12",  # Orange
@@ -35,7 +35,7 @@ class TADistributionVisualizer:
 
     # CDF line colors (darker shades of band colors)
     CDF_COLORS = {
-        850: "#1F618D",   # Dark Blue
+        850: "#1F618D",  # Dark Blue
         1800: "#A93226",  # Dark Red
         2100: "#196F3D",  # Dark Green
         2300: "#B9770E",  # Dark Orange
@@ -43,7 +43,7 @@ class TADistributionVisualizer:
     }
 
     # Priority patterns for manual sector sorting
-    SECTOR_PRIORITIES = ['1', '2', '3', '4', 'M1', 'M2', 'M3', '11', '12', '13']
+    SECTOR_PRIORITIES = ["1", "2", "3", "4", "M1", "M2", "M3", "11", "12", "13"]
 
     def __init__(self):
         """Initialize dengan distance labels sesuai format CSV."""
@@ -82,14 +82,11 @@ class TADistributionVisualizer:
         return len(self.SECTOR_PRIORITIES)  # Default to end for non-matching
 
     def create_sector_chart(
-        self, 
-        sector_data: pl.DataFrame, 
-        sector_name: str,
-        tower_id: str
+        self, sector_data: pl.DataFrame, sector_name: str, tower_id: str
     ) -> go.Figure:
         """
         Create combined bar and CDF chart untuk single sector.
-        
+
         Args:
             sector_data: DataFrame containing TA distribution data for one sector
             sector_name: Name of the sector
@@ -129,12 +126,10 @@ class TADistributionVisualizer:
         for row in sector_data.iter_rows(named=True):
             band = row.get("Band", "Unknown")
             bands_in_sector.append(band)
-            
+
             # Extract distance values (raw counts)
-            distance_values = [
-                row.get(label, 0) for label in self.distance_labels
-            ]
-            
+            distance_values = [row.get(label, 0) for label in self.distance_labels]
+
             # Extract CDF percentage values
             cdf_values = [
                 row.get("78", 0),
@@ -170,7 +165,7 @@ class TADistributionVisualizer:
 
             # Add CDF line dengan color sesuai band
             cdf_color = self._get_cdf_color(band)
-            
+
             fig.add_trace(
                 go.Scatter(
                     name=f"L{band} CDF",
@@ -256,33 +251,31 @@ class TADistributionVisualizer:
 
         return fig
 
-    def display_sector_charts_in_rows(
-        self, 
-        df: pl.DataFrame, 
-        tower_id: str
-    ):
+    def display_sector_charts_in_rows(self, df: pl.DataFrame, tower_id: str):
         """
         Display TA distribution charts in rows (one chart per row).
-        Sorted manually by Sector_Name based on priority patterns.
-        Uses 2:1 column layout (chart:empty).
         """
         if df.is_empty():
             st.warning("No TA distribution data available.")
             return
 
         # Get unique sectors
-        if "Sector_Name" in df.columns:
-            unique_sectors = df["Sector_Name"].unique().to_list()
-        else:
-            st.warning("Sector_Name column not found.")
+        sector_column = "newta_sector_name"
+        if sector_column not in df.columns:
+            st.warning(f"Sector column '{sector_column}' not found.")
             return
-        
+
+        unique_sectors = df[sector_column].unique().to_list()
+
         if not unique_sectors:
             st.warning("No sector data found.")
             return
 
         # Custom sort by priority
         unique_sectors.sort(key=self._get_sector_priority)
+
+        # Display summary info
+        st.info(f"📋 Showing {len(unique_sectors)} sectors for tower **{tower_id}**")
 
         # Display each sector in its own row
         for idx, sector_name in enumerate(unique_sectors):
@@ -294,20 +287,36 @@ class TADistributionVisualizer:
                     border: 2px solid {self.BORDER_COLOR};
                     border-radius: 0.5rem;
                     padding: calc(1em - 1px);
-                    margin-bottom: 1rem;
+                    margin-bottom: 1rem;    
                 }}
                 """,
             ):
-                sector_data = df.filter(pl.col("Sector_Name") == sector_name)
-                
+                sector_data = df.filter(pl.col(sector_column) == sector_name)
+
                 if not sector_data.is_empty():
-                    fig = self.create_sector_chart(
-                        sector_data, sector_name, tower_id
+                    # Tampilkan info sector
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        bands_in_sector = sector_data["newta_band"].unique().to_list()
+                        st.write(f"**Bands:** {', '.join(map(str, bands_in_sector))}")
+                    with col2:
+                        avg_ta90 = sector_data.select(
+                            pl.col("newta_ta90").mean()
+                        ).item()
+                        st.write(f"**Avg TA90:** {avg_ta90:.2f}m")
+                    with col3:
+                        total_samples = sector_data.select(
+                            pl.col("newta_total").sum()
+                        ).item()
+                        st.write(f"**Samples:** {total_samples:,}")
+
+                    fig = self.create_sector_chart(sector_data, sector_name, tower_id)
+                    st.plotly_chart(
+                        fig, width="stretch", config={"displayModeBar": True}
                     )
-                    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
                 else:
                     st.info(f"No data for sector {sector_name}")
 
             # Add small spacing between charts
             if idx < len(unique_sectors) - 1:
-                st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
