@@ -1,6 +1,7 @@
 """
 ============================================================================
-FILE: src/services/lte_hourly_visualizer.py - UPDATED with Correct Column Names
+FILE: src/services/lte_hourly_visualizer.py
+UPDATED: Removed KPI selection - show all KPIs automatically
 ============================================================================
 """
 
@@ -47,7 +48,7 @@ class LTEHourlyVisualizer:
         ]
 
     def _define_kpi_configs(self) -> Dict:
-        """✅ UPDATED: KPI configurations using ACTUAL column names from your data"""
+        """✅ KPI configurations using ACTUAL column names from your data"""
         return {
             # Total Traffic (GB) - Simple column
             "total_traffic": {
@@ -185,15 +186,6 @@ class LTEHourlyVisualizer:
                 "format": ".4f",
                 "chart_type": "line",
             },
-            # DL Spectral Efficiency
-            # "prbdl": {
-            #     "num": "lte_hour_dl_prb_util_num",
-            #     "den": "lte_hour_dl_prb_util_den",
-            #     "label": "PRB DL Utilization",
-            #     "format": ".4f",
-            #     "chart_type": "line",
-            # },
-            # RAN Latency (ms)
             "ran_latency": {
                 "num": "lte_hour_ran_latency_num",
                 "den": "lte_hour_ran_latency_den",
@@ -201,7 +193,6 @@ class LTEHourlyVisualizer:
                 "format": ".2f",
                 "chart_type": "line",
             },
-            # DL PRB Utilization (%)
             "dl_prb_util": {
                 "num": "lte_hour_dl_prb_util_num",
                 "den": "lte_hour_dl_prb_util_den",
@@ -210,7 +201,6 @@ class LTEHourlyVisualizer:
                 "is_percent": True,
                 "chart_type": "line",
             },
-            # UL PRB Utilization (%)
             "ul_prb_util": {
                 "num": "lte_hour_ul_prb_util_num",
                 "den": "lte_hour_ul_prb_util_den",
@@ -233,7 +223,7 @@ class LTEHourlyVisualizer:
                 "format": ".2f",
                 "chart_type": "line",
             },
-            # Cell Availability (%)
+            # MAX RRC Users
             "maxrrc": {
                 "col": "lte_hour_conn_user_max",
                 "label": "MAX RRC Users",
@@ -316,14 +306,7 @@ class LTEHourlyVisualizer:
                     )
                 )
 
-        # tower_name = (
-        #     sector_data["tower_name"].first()
-        #     if "tower_name" in sector_data.columns
-        #     else "Unknown"
-        # )
-
         fig.update_layout(
-            # title_text=f"SECTOR - {sector_name} | {tower_name}",
             title_text=f"SECTOR - {sector_name}",
             title_x=0.4,
             title_font=dict(size=20, color="#000000"),
@@ -337,7 +320,7 @@ class LTEHourlyVisualizer:
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.8,
+                y=-0.5,
                 xanchor="center",
                 x=0.5,
                 font=dict(size=14),
@@ -347,7 +330,7 @@ class LTEHourlyVisualizer:
             ),
             width=600,
             height=350,
-            margin=dict(l=80, r=80, t=40, b=20),
+            margin=dict(l=80, r=80, t=40, b=40),
             plot_bgcolor=self.silver_light_bg,
             paper_bgcolor=self.silver_light_bg,
         )
@@ -399,7 +382,7 @@ class LTEHourlyVisualizer:
         )
         config = self.kpi_configs[kpi_name]
 
-        st.markdown(f"### 📊 {config['label']} - {tower_name}")
+        st.markdown(f"### 📊 {config['label']} Hourly - {tower_name}")
 
         num_sectors = len(unique_sectors)
         num_rows = (num_sectors + 2) // 3
@@ -435,7 +418,9 @@ class LTEHourlyVisualizer:
                                 st.info(f"📭 No data for sector {sector}")
 
     def render_all_kpis(self, df: pl.DataFrame):
-        """Render all KPI charts sequentially"""
+        """
+        ✅ UPDATED: Render all available KPIs automatically without selection
+        """
         if df.is_empty():
             st.warning("❌ No LTE hourly data available for visualization")
             return
@@ -444,17 +429,23 @@ class LTEHourlyVisualizer:
             "avg_cqi",
             "spectral_efficiency",
             "qpsk_rate",
-            "ul_user_throughput",
-            "cell_ul_throughput",
             "dl_user_throughput",
+            "ul_user_throughput",
             "cell_dl_throughput",
+            "cell_ul_throughput",
+            "cell_availability",
+            "total_traffic",
             "maxrrc",
+            "dl_prb_util",
             "sssr",
             "volte_cssr",
             "erab_drop_rate",
             "handover_sr",
-            "dl_prb_util",
             "ul_prb_util",
+            "ran_latency",
+            "volte_traffic",
+            "volte_dl_loss",
+            "volte_ul_loss",
         ]
 
         # Check which KPIs are available
@@ -465,7 +456,11 @@ class LTEHourlyVisualizer:
                 if config["col"] in df.columns:
                     available_kpis.append(kpi)
             else:
-                if config["num"] in df.columns and config["den"] in df.columns:
+                # Check if all required num/den columns exist
+                num_cols = config["num"] if isinstance(config["num"], list) else [config["num"]]
+                den_cols = config["den"] if isinstance(config["den"], list) else [config["den"]]
+                
+                if all(col in df.columns for col in num_cols + den_cols):
                     available_kpis.append(kpi)
 
         if not available_kpis:
@@ -476,29 +471,12 @@ class LTEHourlyVisualizer:
             )
             return
 
-        st.success(f"✅ Found {len(available_kpis)} calculable KPIs")
-
-        # Let user select which KPIs to display
-        selected_kpis = st.multiselect(
-            "Select KPIs to display:",
-            options=available_kpis,
-            default=available_kpis[:20],  # Show first 4 by default
-            format_func=lambda x: self.kpi_configs[x]["label"],
-            help="Choose which KPIs to visualize",
-        )
-
-        if not selected_kpis:
-            st.info("ℹ️ Please select at least one KPI to display charts")
-            return
-
-        # Render selected KPIs
-        for kpi in selected_kpis:
+        for kpi in available_kpis:
             self.render_kpi_charts_by_sector(df, kpi)
-            # st.markdown("---")
 
     def _clean_numeric_column(self, df: pl.DataFrame, col_name: str) -> pl.DataFrame:
         """
-        ✅ FIXED: Clean numeric column - handle all data types properly
+        ✅ Clean numeric column - handle all data types properly
         """
         if col_name not in df.columns:
             logger.warning(f"❌ Column {col_name} not found in DataFrame")
@@ -557,7 +535,7 @@ class LTEHourlyVisualizer:
         is_percent: bool = False,
     ) -> pl.DataFrame:
         """
-        ✅ FIXED: Calculate KPI with proper null handling and debugging
+        ✅ Calculate KPI with proper null handling and debugging
         """
         is_list = isinstance(num_col, list)
 
@@ -596,7 +574,6 @@ class LTEHourlyVisualizer:
             df = df.with_columns(kpi_expr.alias("kpi_value"))
 
         else:
-            # Single ratio calculation
             if num_col not in df.columns:
                 logger.error(f"❌ Missing numerator column: {num_col}")
                 return df.with_columns(pl.lit(None).alias("kpi_value"))
@@ -605,11 +582,9 @@ class LTEHourlyVisualizer:
                 logger.error(f"❌ Missing denominator column: {den_col}")
                 return df.with_columns(pl.lit(None).alias("kpi_value"))
 
-            # Clean the columns
             df = self._clean_numeric_column(df, num_col)
             df = self._clean_numeric_column(df, den_col)
             
-            # DEBUG: Check values after cleaning
             num_nulls = df.select(pl.col(num_col).null_count()).item()
             den_nulls = df.select(pl.col(den_col).null_count()).item()
             logger.debug(f"📊 {num_col}: {num_nulls} nulls, {den_col}: {den_nulls} nulls")
@@ -638,7 +613,7 @@ class LTEHourlyVisualizer:
 
     def _prepare_chart_data(self, df: pl.DataFrame, kpi_name: str) -> pl.DataFrame:
         """
-        ✅ FIXED: Prepare data for specific KPI chart with better debugging
+        ✅ Prepare data for specific KPI chart with better debugging
         """
         config = self.kpi_configs.get(kpi_name)
         if not config:
@@ -651,7 +626,6 @@ class LTEHourlyVisualizer:
         if "col" in config:
             if config["col"] not in df.columns:
                 logger.error(f"❌ Column {config['col']} not found for KPI {kpi_name}")
-                logger.info(f"Available columns: {df.columns[:10]}...")
                 return pl.DataFrame()
         else:
             # Check num/den columns
@@ -721,8 +695,6 @@ class LTEHourlyVisualizer:
             )
             
             logger.info(f"✅ Chart data prepared: {len(chart_data)} rows for {kpi_name}")
-            logger.debug(f"📊 Unique sectors: {chart_data['sector'].unique().to_list()}")
-            logger.debug(f"📡 Unique bands: {chart_data['band'].unique().to_list()}")
             
             return chart_data
             

@@ -1,7 +1,7 @@
 """
 ============================================================================
-FILE: src/services/wd_ta_chart_visualizer.py
-UPDATED: Added area chart support for total_payload KPI
+FILE: src/services/bh_ta_chart_visualizer.py
+Complete implementation for Busy Hour + TA data visualization
 ============================================================================
 """
 
@@ -16,10 +16,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class WDTAChartVisualizer:
+class BHTAChartVisualizer:
     """
-    Visualizes WD+TA joined data with sector-based charts
-    UPDATED: Added area chart support for total_payload
+    Visualizes BH+TA joined data with sector-based charts
+    Similar to WDTAChartVisualizer but for Busy Hour data
     """
 
     def __init__(self):
@@ -51,53 +51,53 @@ class WDTAChartVisualizer:
         ]
 
     def _define_kpi_configs(self) -> Dict:
-        """Define KPI calculation and display configurations"""
+        """Define KPI calculation and display configurations for Busy Hour data"""
         return {
             "total_payload": {
-                "col": "newwd_total_payload_gb_kpi",
+                "col": "newbh_total_payload_gb_kpi",
                 "label": "Total Payload (GB)",
                 "format": ".2f",
                 "chart_type": "area",
             },
             "dl_user_throughput": {
-                "num": "newwd_cell_downlink_user_throughput_num",
-                "den": "newwd_cell_downlink_user_throughput_den",
+                "num": "newbh_cell_downlink_user_throughput_num",
+                "den": "newbh_cell_downlink_user_throughput_den",
                 "label": "DL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "ul_user_throughput": {
-                "num": "newwd_cell_uplink_user_throughput_num",
-                "den": "newwd_cell_uplink_user_throughput_den",
+                "num": "newbh_cell_uplink_user_throughput_num",
+                "den": "newbh_cell_uplink_user_throughput_den",
                 "label": "UL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_dl_throughput": {
-                "num": "newwd_pdcp_cell_throughput_dl_num",
-                "den": "newwd_pdcp_cell_throughput_dl_denom",
+                "num": "newbh_pdcp_cell_throughput_dl_num",
+                "den": "newbh_pdcp_cell_throughput_dl_denom",
                 "label": "PDCP DL Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_ul_throughput": {
-                "num": "newwd_pdcp_cell_throughput_ul_num",
-                "den": "newwd_pdcp_cell_throughput_ul_den",
+                "num": "newbh_pdcp_cell_throughput_ul_num",
+                "den": "newbh_pdcp_cell_throughput_ul_den",
                 "label": "PDCP UL Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "volte_dl_loss": {
-                "num": "newwd_cell_volte_dl_packet_loss_ratio_num",
-                "den": "newwd_cell_volte_dl_packet_loss_ratio_den",
+                "num": "newbh_cell_volte_dl_packet_loss_ratio_num",
+                "den": "newbh_cell_volte_dl_packet_loss_ratio_den",
                 "label": "VoLTE DL Packet Loss (%)",
                 "format": ".4f",
                 "is_percent": True,
                 "chart_type": "line",
             },
             "volte_ul_loss": {
-                "num": "newwd_cell_volte_ul_packet_loss_ratio_num",
-                "den": "newwd_cell_volte_ul_packet_loss_ratio_den",
+                "num": "newbh_cell_volte_ul_packet_loss_ratio_num",
+                "den": "newbh_cell_volte_ul_packet_loss_ratio_den",
                 "label": "VoLTE UL Packet Loss (%)",
                 "format": ".4f",
                 "is_percent": True,
@@ -105,14 +105,14 @@ class WDTAChartVisualizer:
             },
             "session_setup_sr": {
                 "num": [
-                    "newwd_cell_session_setup_success_rate_a_num",
-                    "newwd_cell_session_setup_success_rate_b_num",
-                    "newwd_cell_session_setup_success_rate_c_num",
+                    "newbh_cell_session_setup_success_rate_a_num",
+                    "newbh_cell_session_setup_success_rate_b_num",
+                    "newbh_cell_session_setup_success_rate_c_num",
                 ],
                 "den": [
-                    "newwd_cell_session_setup_success_rate_a_den",
-                    "newwd_cell_session_setup_success_rate_b_den",
-                    "newwd_cell_session_setup_success_rate_c_den",
+                    "newbh_cell_session_setup_success_rate_a_den",
+                    "newbh_cell_session_setup_success_rate_b_den",
+                    "newbh_cell_session_setup_success_rate_c_den",
                 ],
                 "label": "SSSR (%)",
                 "format": ".2f",
@@ -120,61 +120,61 @@ class WDTAChartVisualizer:
                 "chart_type": "line",
             },
             "erab_drop_rate": {
-                "num": "newwd_lerabdroprate_num",
-                "den": "newwd_lerabdroprate_den",
+                "num": "newbh_lerabdroprate_num",
+                "den": "newbh_lerabdroprate_den",
                 "label": "ERAB Drop Rate (%)",
                 "format": ".4f",
                 "is_percent": True,
                 "chart_type": "line",
             },
             "handover_sr": {
-                "num": "newwd_cell_handover_success_rate_inter_and_intra_frequency_num",
-                "den": "newwd_cell_handover_success_rate_inter_and_intra_frequency_den",
+                "num": "newbh_cell_handover_success_rate_inter_and_intra_frequency_num",
+                "den": "newbh_cell_handover_success_rate_inter_and_intra_frequency_den",
                 "label": "Handover Success Rate (%)",
                 "format": ".2f",
                 "is_percent": True,
                 "chart_type": "line",
             },
             "avg_cqi": {
-                "num": "newwd_cell_average_cqi_num",
-                "den": "newwd_cell_average_cqi_den",
+                "num": "newbh_cell_average_cqi_num",
+                "den": "newbh_cell_average_cqi_den",
                 "label": "Average CQI",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "spectral_efficiency": {
-                "num": "newwd_spectral_efficiency_dl_num",
-                "den": "newwd_spectral_efficiency_dl_den",
+                "num": "newbh_spectral_efficiency_dl_num",
+                "den": "newbh_spectral_efficiency_dl_den",
                 "label": "Spectral Efficiency",
                 "format": ".4f",
                 "chart_type": "line",
             },
             "qpsk": {
-                "num": "newwd_cell_qpsk_rate_num",
-                "den": "newwd_cell_qpsk_rate_den",
+                "num": "newbh_cell_qpsk_rate_num",
+                "den": "newbh_cell_qpsk_rate_den",
                 "label": "QPSK Rate (%)",
                 "format": ".2f",
                 "is_percent": True,
                 "chart_type": "line",
             },
             "packet_latency": {
-                "num": "newwd_cell_packet_latency_num",
-                "den": "newwd_cell_packet_latency_den",
+                "num": "newbh_cell_packet_latency_num",
+                "den": "newbh_cell_packet_latency_den",
                 "label": "Packet Latency (ms)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "lasttti": {
-                "num": "newwd_cell_last_tti_ratio_num",
-                "den": "newwd_cell_last_tti_ratio_den",
+                "num": "newbh_cell_last_tti_ratio_num",
+                "den": "newbh_cell_last_tti_ratio_den",
                 "label": "Last TTI Ratio (%)",
                 "format": ".2f",
                 "is_percent": True,
                 "chart_type": "line",
             },
             "voltecssr": {
-                "num": "newwd_cell_volte_cssr_num_4",
-                "den": "newwd_cell_volte_cssr_denom_4",
+                "num": "newbh_cell_volte_cssr_num_4",
+                "den": "newbh_cell_volte_cssr_denom_4",
                 "label": "VoLTE CSSR (%)",
                 "format": ".2f",
                 "is_percent": True,
@@ -290,7 +290,7 @@ class WDTAChartVisualizer:
         df = df.with_columns(
             (
                 "L"
-                + pl.col("newwd_cell_fdd_band")
+                + pl.col("newbh_cell_fdd_band")
                 .cast(pl.Float64)
                 .cast(pl.Int64)
                 .cast(pl.Utf8)
@@ -302,8 +302,8 @@ class WDTAChartVisualizer:
 
     def _parse_dates_safely(self, df: pl.DataFrame) -> pl.DataFrame:
         """Parse mixed date formats in the same column"""
-        if "newwd_date" not in df.columns:
-            logger.warning("Column 'newwd_date' not found")
+        if "newbh_date" not in df.columns:
+            logger.warning("Column 'newbh_date' not found")
             return df
 
         date_formats = ["%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y", "%d/%m/%Y", "%Y/%m/%d"]
@@ -313,7 +313,7 @@ class WDTAChartVisualizer:
         for idx, date_format in enumerate(date_formats):
             try:
                 parsed_col = (
-                    pl.col("newwd_date")
+                    pl.col("newbh_date")
                     .str.strptime(pl.Date, date_format, strict=False)
                     .alias(f"parsed_{idx}")
                 )
@@ -324,7 +324,7 @@ class WDTAChartVisualizer:
 
         if not parsed_columns:
             logger.warning("No date formats could be set up")
-            return df.with_columns(pl.col("newwd_date").alias("date_parsed"))
+            return df.with_columns(pl.col("newbh_date").alias("date_parsed"))
 
         df = df.with_columns(parsed_columns)
         coalesce_expr = pl.coalesce([f"parsed_{i}" for i in range(len(parsed_columns))])
@@ -340,7 +340,7 @@ class WDTAChartVisualizer:
             )
         else:
             logger.warning("Could not parse any dates, using original strings")
-            df = df.with_columns(pl.col("newwd_date").alias("date_parsed"))
+            df = df.with_columns(pl.col("newbh_date").alias("date_parsed"))
 
         return df
 
@@ -364,7 +364,7 @@ class WDTAChartVisualizer:
         df = self._create_band_sector_key(df)
         df = self._parse_dates_safely(df)
 
-        date_col = "date_parsed" if "date_parsed" in df.columns else "newwd_date"
+        date_col = "date_parsed" if "date_parsed" in df.columns else "newbh_date"
 
         chart_data = (
             df.group_by(
@@ -372,14 +372,14 @@ class WDTAChartVisualizer:
                     date_col,
                     "band_sector_key",
                     "newta_sector_name",
-                    "newwd_enodeb_fdd_msc",
+                    "newbh_enodeb_fdd_msc",
                 ]
             )
             .agg(
                 [
                     pl.col("kpi_value").mean().alias("avg_kpi"),
-                    pl.col("newwd_cell_fdd_band").first().alias("band"),
-                    pl.col("newwd_date").first().alias("newwd_date"),
+                    pl.col("newbh_cell_fdd_band").first().alias("band"),
+                    pl.col("newbh_date").first().alias("newbh_date"),
                 ]
             )
             .sort(date_col)
@@ -416,7 +416,7 @@ class WDTAChartVisualizer:
                 x_data = line_data["date_parsed"].to_list()
                 hover_date_format = "%m/%d/%Y"
             else:
-                x_data = line_data["newwd_date"].to_list()
+                x_data = line_data["newbh_date"].to_list()
                 hover_date_format = "%s"
 
             # Area chart or Line chart
@@ -443,7 +443,7 @@ class WDTAChartVisualizer:
                         y=line_data["avg_kpi"].to_list(),
                         name=band_sector_key,
                         mode="lines+markers",
-                        line=dict(color=color, width=4),
+                        line=dict(color=color, width=3),
                         marker=dict(size=8, color=color),
                         hovertemplate="<b>%{fullData.name}</b><br>"
                         + f"Date: %{{x|{hover_date_format}}}<br>"
@@ -466,17 +466,17 @@ class WDTAChartVisualizer:
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.5,
+                y=-0.8,
                 xanchor="center",
                 x=0.5,
-                font=dict(size=12),
+                font=dict(size=14),
                 bgcolor=self.container_bg,
                 bordercolor=self.border_color,
                 borderwidth=1,
             ),
             width=600,
             height=350,
-            margin=dict(l=80, r=80, t=40, b=40),
+            margin=dict(l=80, r=80, t=40, b=20),
             plot_bgcolor=self.silver_light_bg,
             paper_bgcolor=self.silver_light_bg,
         )
@@ -521,7 +521,7 @@ class WDTAChartVisualizer:
             return
 
         unique_sectors = chart_data["newta_sector_name"].unique().sort().to_list()
-        unique_towerid = chart_data["newwd_enodeb_fdd_msc"].unique().sort().to_list()
+        unique_towerid = chart_data["newbh_enodeb_fdd_msc"].unique().sort().to_list()
 
         config = self.kpi_configs[kpi_name]
 
@@ -534,7 +534,7 @@ class WDTAChartVisualizer:
         else:
             tower_display = ""
 
-        st.markdown(f"### 📊 {config['label']} Daily {tower_display}")
+        st.markdown(f"### 📊 {config['label']} Busy Hour {tower_display}")
 
         num_sectors = len(unique_sectors)
         num_rows = (num_sectors + 2) // 3
@@ -551,10 +551,10 @@ class WDTAChartVisualizer:
                     with cols[idx]:
                         tower_id = chart_data.filter(
                             pl.col("newta_sector_name") == sector
-                        )["newwd_enodeb_fdd_msc"].first()
+                        )["newbh_enodeb_fdd_msc"].first()
 
                         with stylable_container(
-                            key=f"sector_chart_{tower_id}_{sector}_{kpi_name}_{idx}",
+                            key=f"bh_sector_chart_{tower_id}_{sector}_{kpi_name}_{idx}",
                             css_styles=f"""
                             {{
                                 background-color: {self.silver_light_bg};
@@ -576,24 +576,24 @@ class WDTAChartVisualizer:
     def render_all_kpis(self, df: pl.DataFrame):
         """Render all KPI charts sequentially"""
         if df.is_empty():
-            st.warning("No WD+TA data available for visualization")
+            st.warning("No BH+TA data available for visualization")
             return
 
         all_kpis = [
             "avg_cqi",
-            "spectral_efficiency",
             "qpsk",
-            "total_payload",
+            "lasttti",
+            "spectral_efficiency",
+            "voltecssr",
+            "erab_drop_rate",
             "dl_user_throughput",
             "ul_user_throughput",
+            "total_payload",
             "pdcp_dl_throughput",
             "pdcp_ul_throughput",
-            "lasttti",
-            "voltecssr",
             "volte_dl_loss",
             "volte_ul_loss",
             "session_setup_sr",
-            "erab_drop_rate",
             "handover_sr",
             "packet_latency",
         ]
