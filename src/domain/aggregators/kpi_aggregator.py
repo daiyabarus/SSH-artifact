@@ -61,7 +61,6 @@ class KPIAggregator:
 
         logger.info(f"Calculating BH KPIs for {len(df)} rows")
 
-        # Downlink User Throughput
         df = self._safe_calculate(
             df,
             "newbh_cell_downlink_user_throughput_num",
@@ -70,7 +69,6 @@ class KPIAggregator:
             is_pct=False,
         )
 
-        # Uplink User Throughput
         df = self._safe_calculate(
             df,
             "newbh_cell_uplink_user_throughput_num",
@@ -79,7 +77,6 @@ class KPIAggregator:
             is_pct=False,
         )
 
-        # PDCP Cell Throughput DL
         df = self._safe_calculate(
             df,
             "newbh_pdcp_cell_throughput_dl_num",
@@ -88,7 +85,6 @@ class KPIAggregator:
             is_pct=False,
         )
 
-        # PDCP Cell Throughput UL
         df = self._safe_calculate(
             df,
             "newbh_pdcp_cell_throughput_ul_num",
@@ -97,7 +93,6 @@ class KPIAggregator:
             is_pct=False,
         )
 
-        # VoLTE DL Packet Loss Ratio
         df = self._safe_calculate(
             df,
             "newbh_cell_volte_dl_packet_loss_ratio_num",
@@ -105,7 +100,6 @@ class KPIAggregator:
             "volte_dl_packet_loss_pct",
         )
 
-        # VoLTE UL Packet Loss Ratio
         df = self._safe_calculate(
             df,
             "newbh_cell_volte_ul_packet_loss_ratio_num",
@@ -151,7 +145,7 @@ class KPIAggregator:
             df, "newbh_cell_qpsk_rate_num", "newbh_cell_qpsk_rate_den", "qpsk_rate_pct"
         )
 
-        # Spectral Efficiency DL
+        # Spectrum Efficiency DL
         df = self._safe_calculate(
             df,
             "newbh_spectral_efficiency_dl_num",

@@ -1,6 +1,7 @@
 """
 ============================================================================
 FILE: src/repositories/data_repository.py
+UPDATED: Fixed TA queries with MAX date condition and ambiguous column errors
 ============================================================================
 """
 
@@ -235,39 +236,89 @@ class DataRepository:
         return df
 
     def fetch_ta_data_all(self, tower_ids: List[str]) -> pl.DataFrame:
-        """Fetch ALL TA data - NO date filter"""
+        """
+        ✅ UPDATED: Fetch TA data with MAX date condition per tower
+        Only returns the latest data for each tower
+        """
         table = self._settings.TABLE_TA
         tower_col = self._settings.TOWERID_COLUMNS[table]
+        date_col = self._settings.DATE_COLUMNS[table]
 
-        where = self._build_tower_filter(tower_ids, tower_col)
-        logger.info(f"TA ALL Query WHERE: {where}")
-
-        query = self._query_builder.select(
-            table=table,
-            where=where,
-            order_by=f"{self._settings.DATE_COLUMNS[table]}, {tower_col}",
+        tower_filter = self._build_tower_filter(tower_ids, tower_col)
+        
+        # Query with correlated subquery to get max date per tower
+        query = f"""
+        SELECT t.*
+        FROM {table} t
+        WHERE t.{tower_col} IN (
+            SELECT sub.{tower_col}
+            FROM {table} sub
+            WHERE {tower_filter}
         )
+        AND t.{date_col} = (
+            SELECT MAX(sub2.{date_col})
+            FROM {table} sub2
+            WHERE sub2.{tower_col} = t.{tower_col}
+        )
+        AND {tower_filter}
+        ORDER BY t.{tower_col}, t.newta_sector
+        """
 
+        logger.info(f"TA MAX DATE Query")
         df = self._query_builder.to_dataframe(query, engine="polars")
-        logger.info(f"TA ALL Data fetched: {len(df)} rows")
+        logger.info(f"TA Data fetched (latest date per tower): {len(df)} rows")
+        
+        if not df.is_empty() and date_col in df.columns:
+            unique_dates = df.select(pl.col(date_col).n_unique()).item()
+            date_range = df.select([
+                pl.col(date_col).min().alias("min_date"),
+                pl.col(date_col).max().alias("max_date")
+            ]).to_dicts()[0]
+            logger.info(f"TA Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)")
+        
         return df
 
     def fetch_kqi_data_all(self, tower_ids: List[str]) -> pl.DataFrame:
-        """Fetch ALL KQI data - NO date filter"""
+        """
+        ✅ UPDATED: Fetch KQI data with MAX date condition per tower
+        Only returns the latest data for each tower
+        """
         table = self._settings.TABLE_KQI
         tower_col = self._settings.TOWERID_COLUMNS[table]
+        date_col = self._settings.DATE_COLUMNS[table]
 
-        where = self._build_tower_filter(tower_ids, tower_col)
-        logger.info(f"KQI ALL Query WHERE: {where}")
+        tower_filter = self._build_tower_filter(tower_ids, tower_col)
 
-        query = self._query_builder.select(
-            table=table,
-            where=where,
-            order_by=f"{self._settings.DATE_COLUMNS[table]}, {tower_col}",
+        # Query with correlated subquery to get max date per tower
+        query = f"""
+        SELECT k.*
+        FROM {table} k
+        WHERE k.{tower_col} IN (
+            SELECT sub.{tower_col}
+            FROM {table} sub
+            WHERE {tower_filter}
         )
+        AND k.{date_col} = (
+            SELECT MAX(sub2.{date_col})
+            FROM {table} sub2
+            WHERE sub2.{tower_col} = k.{tower_col}
+        )
+        AND {tower_filter}
+        ORDER BY k.{tower_col}
+        """
 
+        logger.info(f"KQI MAX DATE Query")
         df = self._query_builder.to_dataframe(query, engine="polars")
-        logger.info(f"KQI ALL Data fetched: {len(df)} rows")
+        logger.info(f"KQI Data fetched (latest date per tower): {len(df)} rows")
+        
+        if not df.is_empty() and date_col in df.columns:
+            unique_dates = df.select(pl.col(date_col).n_unique()).item()
+            date_range = df.select([
+                pl.col(date_col).min().alias("min_date"),
+                pl.col(date_col).max().alias("max_date")
+            ]).to_dicts()[0]
+            logger.info(f"KQI Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)")
+        
         return df
 
     def fetch_scot_data(self, tower_ids: List[str]) -> pl.DataFrame:
@@ -300,11 +351,12 @@ class DataRepository:
 
     def fetch_joined_gcell_scot_ta(self, tower_ids: List[str]) -> pl.DataFrame:
         """
-        Fetch joined GCELL + SCOT + TA data
+        ✅ UPDATED: Fetch joined GCELL + SCOT + TA data with MAX TA date
         """
         gcell_table = self._settings.TABLE_GCELL
         scot_table = self._settings.TABLE_SCOT
         ta_table = self._settings.TABLE_TA
+        ta_date_col = self._settings.DATE_COLUMNS[ta_table]
 
         gcell_tower_col = self._settings.TOWERID_COLUMNS[gcell_table]
         tower_filter = self._build_tower_filter(tower_ids, gcell_tower_col)
@@ -328,57 +380,87 @@ class DataRepository:
             s.newscot_target_site,
             t.newta_sector,
             t.newta_sector_name,
-            t.newta_ta90
+            t.newta_ta90,
+            t.{ta_date_col} as newta_date
         FROM {gcell_table} g
         LEFT JOIN {scot_table} s ON g.moentity = s.newscot_cell
-        LEFT JOIN {ta_table} t ON g.moentity = t.newta_eutrancell
+        LEFT JOIN (
+            SELECT t1.*
+            FROM {ta_table} t1
+            WHERE t1.{ta_date_col} = (
+                SELECT MAX(t2.{ta_date_col})
+                FROM {ta_table} t2
+                WHERE t2.newta_eutrancell = t1.newta_eutrancell
+            )
+        ) t ON g.moentity = t.newta_eutrancell
         WHERE {tower_filter}
         ORDER BY g.{gcell_tower_col}, g.moentity
         """
 
-        logger.info(f"Joined GCELL+SCOT+TA Query")
+        logger.info(f"Joined GCELL+SCOT+TA Query (with MAX TA date)")
 
         df = self._query_builder.to_dataframe(join_query, engine="polars")
         logger.info(f"Joined GCELL+SCOT+TA Data fetched: {len(df)} rows")
 
         if not df.is_empty():
             sample = df.head(3).select(
-                ["moentity", "new_tower_id", "latitude", "longitude"]
+                ["moentity", "new_tower_id", "newta_sector_name", "newta_date"]
             )
-            logger.info(f"Sample GCELL coordinates:\n{sample}")
+            logger.info(f"Sample joined data:\n{sample}")
 
         return df
 
     def fetch_ta_distribution_data(self, tower_ids: List[str]) -> pl.DataFrame:
-        """Fetch TA distribution data"""
+        """
+        ✅ FIXED: Fetch TA distribution data with MAX date per tower
+        Explicitly select all needed columns to avoid ambiguous column errors
+        """
         table = self._settings.TABLE_TA
         tower_col = self._settings.TOWERID_COLUMNS[table]
+        date_col = self._settings.DATE_COLUMNS[table]
 
-        where = self._build_tower_filter(tower_ids, tower_col)
-        logger.info(f"TA Distribution Query: {where}")
+        tower_filter = self._build_tower_filter(tower_ids, tower_col)
 
         query = f"""
-        SELECT 
-            newta_towerid_sector,
-            newta_sector_name,
-            newta_band,
-            newta_ta90,
-            newta_ta99,
-            newta_total,
-            newta_0_78_m, newta_78_234_m, newta_234_390_m, newta_390_546_m,
-            newta_546_702_m, newta_702_858_m, newta_858_1014_m, newta_1014_1560_m,
-            newta_1560_2106_m, newta_2106_2652_m, newta_2652_3120_m, newta_3120_3900_m,
-            newta_3900_6318_m, newta_6318_10062_m, newta_10062_13962_m, newta_13962_20000_m,
-            newta_78, newta_234, newta_390, newta_546, newta_702, newta_858,
-            newta_1014, newta_1560, newta_2106, newta_2652, newta_3120, newta_3900,
-            newta_6318, newta_10062, newta_13962, newta_20000
-        FROM {table}
-        WHERE {where}
-        ORDER BY newta_sector_name, newta_band
+        SELECT DISTINCT
+            t.newta_towerid_sector,
+            t.newta_sector_name,
+            t.newta_band,
+            t.newta_ta90,
+            t.newta_ta99,
+            t.newta_total,
+            t.newta_0_78_m, t.newta_78_234_m, t.newta_234_390_m, t.newta_390_546_m,
+            t.newta_546_702_m, t.newta_702_858_m, t.newta_858_1014_m, t.newta_1014_1560_m,
+            t.newta_1560_2106_m, t.newta_2106_2652_m, t.newta_2652_3120_m, t.newta_3120_3900_m,
+            t.newta_3900_6318_m, t.newta_6318_10062_m, t.newta_10062_13962_m, t.newta_13962_20000_m,
+            t.newta_78, t.newta_234, t.newta_390, t.newta_546, t.newta_702, t.newta_858,
+            t.newta_1014, t.newta_1560, t.newta_2106, t.newta_2652, t.newta_3120, t.newta_3900,
+            t.newta_6318, t.newta_10062, t.newta_13962, t.newta_20000,
+            t.{date_col} as newta_date,
+            t.{tower_col} as newta_managed_element
+        FROM {table} t
+        WHERE t.{tower_col} IN (
+            SELECT sub.{tower_col}
+            FROM {table} sub
+            WHERE {tower_filter}
+        )
+        AND t.{date_col} = (
+            SELECT MAX(sub2.{date_col})
+            FROM {table} sub2
+            WHERE sub2.{tower_col} = t.{tower_col}
+        )
+        AND {tower_filter}
+        ORDER BY t.newta_sector_name, t.newta_band
         """
 
+        logger.info(f"TA Distribution MAX DATE Query (with explicit columns)")
         df = self._query_builder.to_dataframe(query, engine="polars")
-        logger.info(f"TA Distribution Data fetched: {len(df)} rows")
+        logger.info(f"TA Distribution Data fetched (latest date): {len(df)} rows")
+        
+        if not df.is_empty() and "newta_date" in df.columns:
+            unique_dates = df.select(pl.col("newta_date").n_unique()).item()
+            logger.info(f"TA Distribution unique dates: {unique_dates}")
+        
         return df
 
     def fetch_wd_ta_separate(
@@ -576,7 +658,6 @@ class DataRepository:
             logger.error(f"🔍 Stack trace:\n{traceback.format_exc()}")
             return pl.DataFrame()
 
-
     def _cleanse_lte_hourly_data(self, df: pl.DataFrame) -> pl.DataFrame:
         """
         ✅ FIXED: Cleanse data while preserving Integer columns like cell_id
@@ -711,7 +792,6 @@ class DataRepository:
 
         logger.info("✅ Data cleansing complete")
         return df
-
 
     def _add_sector_band_mapping(self, df: pl.DataFrame) -> pl.DataFrame:
         """

@@ -22,17 +22,17 @@ class TADistributionVisualizer:
     BORDER_COLOR = "#75715E"  # Subtle gray for container border
 
     BAND_COLORS = {
-        "850": "#3498DB",  # Blue
-        "1800": "#E74C3C",  # Red
-        "2100": "#2ECC71",  # Green
+        "850": "#52eb0c",  # Blue
+        "1800": "#080cec",  # Red
+        "2100": "#ef17e8",  # Green
         "2300": "#F39C12",  # Orange
         "2600": "#9B59B6",  # Purple
     }
 
     CDF_COLORS = {
-        "850": "#1F618D",  # Dark Blue
-        "1800": "#A93226",  # Dark Red
-        "2100": "#196F3D",  # Dark Green
+        "850": "#52eb0c",  # Dark Blue
+        "1800": "#080cec",  # Dark Red
+        "2100": "#ef17e8",  # Dark Green
         "2300": "#B9770E",  # Dark Orange
         "2600": "#6C3483",  # Dark Purple
     }

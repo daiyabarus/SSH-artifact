@@ -150,7 +150,6 @@ class CoverageTabRenderer(TabRenderer):
         with st.spinner("📊 Generating TA distribution charts..."):
             visualizer.display_sector_charts_in_rows(df_ta_distribution, selected_tower)
 
-
 class DailyStatisticsTabRenderer(TabRenderer):
     """Render Daily Statistics (WD+TA) tab"""
 
@@ -197,7 +196,6 @@ class DailyStatisticsTabRenderer(TabRenderer):
         MetricsRenderer.render_metric_grid(metrics, columns=4)
         st.markdown("---")
 
-
 class BusyHourTabRenderer(TabRenderer):
     """Render Busy Hour Statistics (BH+TA) tab"""
 
@@ -243,7 +241,6 @@ class BusyHourTabRenderer(TabRenderer):
 
         MetricsRenderer.render_metric_grid(metrics, columns=4)
         st.markdown("---")
-
 
 class HourlyStatisticsTabRenderer(TabRenderer):
     """Render Hourly Statistics (LTE Hourly) tab"""
@@ -315,7 +312,6 @@ class HourlyStatisticsTabRenderer(TabRenderer):
                 )
 
         st.markdown("---")
-
 
 class DataTablesTabRenderer(TabRenderer):
     """Render Data Tables & Configuration tab"""
@@ -418,7 +414,6 @@ class DataTablesTabRenderer(TabRenderer):
             else:
                 st.info("No GCELL data available")
 
-        # Combined GCELL+SCOT+TA view
         st.markdown("---")
         st.markdown("#### 🔗 Joined GCELL + SCOT + TA")
 
@@ -470,6 +465,7 @@ class Dashboard:
         self.busy_hour_tab = BusyHourTabRenderer(data_service)
         self.hourly_stats_tab = HourlyStatisticsTabRenderer(data_service)
         self.data_tables_tab = DataTablesTabRenderer(data_service)
+        
 
     def render(self, tower_ids: List[str], start_date: datetime, end_date: datetime):
         """
@@ -485,7 +481,6 @@ class Dashboard:
         if not self._validate_inputs(tower_ids, start_date, end_date):
             return
 
-        # Create tabs
         tabs = st.tabs(
             [
                 "🗺️ Map",
@@ -496,7 +491,6 @@ class Dashboard:
             ]
         )
 
-        # Render each tab using its dedicated renderer
         with tabs[0]:
             self.coverage_tab.render(tower_ids, start_date, end_date)
 
@@ -529,3 +523,5 @@ class Dashboard:
         return DataValidator.validate_tower_selection(
             tower_ids
         ) and DataValidator.validate_date_range(start_date, end_date)
+
+

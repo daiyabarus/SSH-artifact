@@ -1,13 +1,14 @@
 """
 ============================================================================
 FILE: src/services/bh_ta_chart_visualizer.py
-Complete implementation for Busy Hour + TA data visualization
+UPDATED: Implemented proper stacked area charts using plotly.express
 ============================================================================
 """
 
 import streamlit as st
 import polars as pl
 import plotly.graph_objects as go
+import plotly.express as px
 from typing import List, Dict, Union
 import logging
 from streamlit_extras.stylable_container import stylable_container
@@ -35,7 +36,7 @@ class BHTAChartVisualizer:
         return [
             "#080cec",
             "#ef17e8",
-            "#ec4899",
+            "#52eb0c",
             "#f59e0b",
             "#10b981",
             "#06b6d4",
@@ -62,28 +63,28 @@ class BHTAChartVisualizer:
             "dl_user_throughput": {
                 "num": "newbh_cell_downlink_user_throughput_num",
                 "den": "newbh_cell_downlink_user_throughput_den",
-                "label": "DL Cell Throughput (Mbps)",
+                "label": "DL User Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "ul_user_throughput": {
                 "num": "newbh_cell_uplink_user_throughput_num",
                 "den": "newbh_cell_uplink_user_throughput_den",
-                "label": "UL Cell Throughput (Mbps)",
+                "label": "UL User Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_dl_throughput": {
                 "num": "newbh_pdcp_cell_throughput_dl_num",
                 "den": "newbh_pdcp_cell_throughput_dl_denom",
-                "label": "PDCP DL Throughput (Mbps)",
+                "label": "DL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_ul_throughput": {
                 "num": "newbh_pdcp_cell_throughput_ul_num",
                 "den": "newbh_pdcp_cell_throughput_ul_den",
-                "label": "PDCP UL Throughput (Mbps)",
+                "label": "UL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
@@ -145,7 +146,7 @@ class BHTAChartVisualizer:
             "spectral_efficiency": {
                 "num": "newbh_spectral_efficiency_dl_num",
                 "den": "newbh_spectral_efficiency_dl_den",
-                "label": "Spectral Efficiency",
+                "label": "Spectrum Efficiency",
                 "format": ".4f",
                 "chart_type": "line",
             },
@@ -390,53 +391,64 @@ class BHTAChartVisualizer:
     def _create_sector_chart(
         self, df: pl.DataFrame, sector_name: str, kpi_name: str
     ) -> go.Figure:
-        """Create chart (line or area) for a specific sector"""
+        """Create chart (line or stacked area) for a specific sector"""
         config = self.kpi_configs[kpi_name]
         sector_data = df.filter(pl.col("newta_sector_name") == sector_name)
 
         if sector_data.is_empty():
             return None
 
-        fig = go.Figure()
-        unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
         chart_type = config.get("chart_type", "line")
 
-        for idx, band_sector_key in enumerate(unique_keys):
-            line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+        # Determine x-axis column
+        if (
+            "date_parsed" in sector_data.columns
+            and not sector_data["date_parsed"].is_null().any()
+        ):
+            x_col = "date_parsed"
+        else:
+            x_col = "newbh_date"
 
-            if line_data.is_empty():
-                continue
+        if chart_type == "area":
+            # Convert to pandas for plotly express
+            sector_df = sector_data.to_pandas()
+            
+            # Use plotly express for stacked area chart
+            fig = px.area(
+                sector_df,
+                x=x_col,
+                y="avg_kpi",
+                color="band_sector_key",
+                line_group="band_sector_key",
+                color_discrete_sequence=self.color_palette,
+                labels={
+                    "avg_kpi": config["label"],
+                    x_col: "",
+                    "band_sector_key": ""
+                },
+            )
+            
+            # Update hover template for better formatting
+            fig.update_traces(
+                hovertemplate="<b>%{fullData.name}</b><br>"
+                + "Date: %{x|%m/%d/%Y}<br>"
+                + f"{config['label']}: %{{y:{config['format']}}}<br>"
+                + "<extra></extra>"
+            )
+        else:
+            # Use existing line chart logic
+            fig = go.Figure()
+            unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
 
-            color = self.color_palette[idx % len(self.color_palette)]
+            for idx, band_sector_key in enumerate(unique_keys):
+                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
 
-            if (
-                "date_parsed" in line_data.columns
-                and not line_data["date_parsed"].is_null().any()
-            ):
-                x_data = line_data["date_parsed"].to_list()
-                hover_date_format = "%m/%d/%Y"
-            else:
-                x_data = line_data["newbh_date"].to_list()
-                hover_date_format = "%s"
+                if line_data.is_empty():
+                    continue
 
-            # Area chart or Line chart
-            if chart_type == "area":
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_data,
-                        y=line_data["avg_kpi"].to_list(),
-                        name=band_sector_key,
-                        mode="lines",
-                        fill="tozeroy",
-                        line=dict(color=color, width=2),
-                        fillcolor=color.replace(")", ", 0.3)").replace("rgb", "rgba"),
-                        hovertemplate="<b>%{fullData.name}</b><br>"
-                        + f"Date: %{{x|{hover_date_format}}}<br>"
-                        + f"{config['label']}: %{{y:{config['format']}}}<br>"
-                        + "<extra></extra>",
-                    )
-                )
-            else:
+                color = self.color_palette[idx % len(self.color_palette)]
+                x_data = line_data[x_col].to_list()
+
                 fig.add_trace(
                     go.Scatter(
                         x=x_data,
@@ -446,7 +458,7 @@ class BHTAChartVisualizer:
                         line=dict(color=color, width=3),
                         marker=dict(size=8, color=color),
                         hovertemplate="<b>%{fullData.name}</b><br>"
-                        + f"Date: %{{x|{hover_date_format}}}<br>"
+                        + "Date: %{x|%m/%d/%Y}<br>"
                         + f"{config['label']}: %{{y:{config['format']}}}<br>"
                         + "<extra></extra>",
                     )
@@ -466,7 +478,7 @@ class BHTAChartVisualizer:
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.8,
+                y=-0.45,
                 xanchor="center",
                 x=0.5,
                 font=dict(size=14),

@@ -1,13 +1,14 @@
 """
 ============================================================================
 FILE: src/services/lte_hourly_visualizer.py
-UPDATED: Removed KPI selection - show all KPIs automatically
+UPDATED: Implemented proper stacked area charts using plotly.express
 ============================================================================
 """
 
 import streamlit as st
 import polars as pl
 import plotly.graph_objects as go
+import plotly.express as px
 from typing import List, Dict, Union
 import logging
 from streamlit_extras.stylable_container import stylable_container
@@ -32,7 +33,7 @@ class LTEHourlyVisualizer:
         return [
             "#080cec",
             "#ef17e8",
-            "#ec4899",
+            "#52eb0c",
             "#f59e0b",
             "#10b981",
             "#06b6d4",
@@ -178,11 +179,11 @@ class LTEHourlyVisualizer:
                 "is_percent": True,
                 "chart_type": "line",
             },
-            # DL Spectral Efficiency
+            # DL Spectrum Efficiency
             "spectral_efficiency": {
                 "num": "lte_hour_dl_se_num",
                 "den": "lte_hour_dl_se_den",
-                "label": "DL Spectral Efficiency",
+                "label": "DL Spectrum Efficiency",
                 "format": ".4f",
                 "chart_type": "line",
             },
@@ -251,7 +252,7 @@ class LTEHourlyVisualizer:
     def _create_sector_chart(
         self, df: pl.DataFrame, sector_name: str, kpi_name: str
     ) -> go.Figure:
-        """Create chart (line or area) for a specific sector"""
+        """Create chart (line or stacked area) for a specific sector"""
         config = self.kpi_configs[kpi_name]
         sector_data = df.filter(pl.col("sector") == sector_name)
 
@@ -259,38 +260,49 @@ class LTEHourlyVisualizer:
             logger.warning(f"⚠️ No data for sector {sector_name}")
             return None
 
-        fig = go.Figure()
-        unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
         chart_type = config.get("chart_type", "line")
 
-        for idx, band_sector_key in enumerate(unique_keys):
-            line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+        # Convert to pandas for plotly express
+        sector_df = sector_data.to_pandas()
 
-            if line_data.is_empty():
-                continue
+        if chart_type == "area":
+            # Use plotly express for stacked area chart
+            fig = px.area(
+                sector_df,
+                x="lte_hour_begin_time",
+                y="avg_kpi",
+                color="band_sector_key",
+                line_group="band_sector_key",
+                color_discrete_sequence=self.color_palette,
+                labels={
+                    "avg_kpi": config["label"],
+                    "lte_hour_begin_time": "",
+                    "band_sector_key": ""
+                },
+            )
+            
+            # Update hover template for better formatting
+            fig.update_traces(
+                hovertemplate="<b>%{fullData.name}</b><br>"
+                + "Time: %{x|%Y-%m-%d %H:%M}<br>"
+                + f"{config['label']}: %{{y:{config['format']}}}<br>"
+                + "<extra></extra>"
+            )
+        else:
+            # Use existing line chart logic
+            fig = go.Figure()
+            unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
 
-            color = self.color_palette[idx % len(self.color_palette)]
-            x_data = line_data["lte_hour_begin_time"].to_list()
-            y_data = line_data["avg_kpi"].to_list()
+            for idx, band_sector_key in enumerate(unique_keys):
+                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
 
-            # Area chart or Line chart
-            if chart_type == "area":
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_data,
-                        y=y_data,
-                        name=band_sector_key,
-                        mode="lines",
-                        fill="tozeroy",
-                        line=dict(color=color, width=2),
-                        fillcolor=color.replace(")", ", 0.3)").replace("rgb", "rgba"),
-                        hovertemplate="<b>%{fullData.name}</b><br>"
-                        + "Time: %{x|%Y-%m-%d %H:%M}<br>"
-                        + f"{config['label']}: %{{y:{config['format']}}}<br>"
-                        + "<extra></extra>",
-                    )
-                )
-            else:
+                if line_data.is_empty():
+                    continue
+
+                color = self.color_palette[idx % len(self.color_palette)]
+                x_data = line_data["lte_hour_begin_time"].to_list()
+                y_data = line_data["avg_kpi"].to_list()
+
                 fig.add_trace(
                     go.Scatter(
                         x=x_data,

@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from typing import List, Dict, Union
 import logging
 from streamlit_extras.stylable_container import stylable_container
+import plotly.express as px
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class WDTAChartVisualizer:
         return [
             "#080cec",
             "#ef17e8",
-            "#ec4899",
+            "#52eb0c",
             "#f59e0b",
             "#10b981",
             "#06b6d4",
@@ -62,28 +63,28 @@ class WDTAChartVisualizer:
             "dl_user_throughput": {
                 "num": "newwd_cell_downlink_user_throughput_num",
                 "den": "newwd_cell_downlink_user_throughput_den",
-                "label": "DL Cell Throughput (Mbps)",
+                "label": "DL User Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "ul_user_throughput": {
                 "num": "newwd_cell_uplink_user_throughput_num",
                 "den": "newwd_cell_uplink_user_throughput_den",
-                "label": "UL Cell Throughput (Mbps)",
+                "label": "UL User Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_dl_throughput": {
                 "num": "newwd_pdcp_cell_throughput_dl_num",
                 "den": "newwd_pdcp_cell_throughput_dl_denom",
-                "label": "PDCP DL Throughput (Mbps)",
+                "label": "DL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
             "pdcp_ul_throughput": {
                 "num": "newwd_pdcp_cell_throughput_ul_num",
                 "den": "newwd_pdcp_cell_throughput_ul_den",
-                "label": "PDCP UL Throughput (Mbps)",
+                "label": "UL Cell Throughput (Mbps)",
                 "format": ".2f",
                 "chart_type": "line",
             },
@@ -145,7 +146,7 @@ class WDTAChartVisualizer:
             "spectral_efficiency": {
                 "num": "newwd_spectral_efficiency_dl_num",
                 "den": "newwd_spectral_efficiency_dl_den",
-                "label": "Spectral Efficiency",
+                "label": "Spectrum Efficiency",
                 "format": ".4f",
                 "chart_type": "line",
             },
@@ -387,6 +388,126 @@ class WDTAChartVisualizer:
 
         return chart_data
 
+    # def _create_sector_chart(
+    #     self, df: pl.DataFrame, sector_name: str, kpi_name: str
+    # ) -> go.Figure:
+    #     """Create chart (line or area) for a specific sector"""
+    #     config = self.kpi_configs[kpi_name]
+    #     sector_data = df.filter(pl.col("newta_sector_name") == sector_name)
+
+    #     if sector_data.is_empty():
+    #         return None
+
+    #     fig = go.Figure()
+    #     unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
+    #     chart_type = config.get("chart_type", "line")
+
+    #     for idx, band_sector_key in enumerate(unique_keys):
+    #         line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+
+    #         if line_data.is_empty():
+    #             continue
+
+    #         color = self.color_palette[idx % len(self.color_palette)]
+
+    #         if (
+    #             "date_parsed" in line_data.columns
+    #             and not line_data["date_parsed"].is_null().any()
+    #         ):
+    #             x_data = line_data["date_parsed"].to_list()
+    #             hover_date_format = "%m/%d/%Y"
+    #         else:
+    #             x_data = line_data["newwd_date"].to_list()
+    #             hover_date_format = "%s"
+
+    #         if chart_type == "area":
+    #             fig.add_trace(
+    #                 go.Scatter(
+    #                     x=x_data,
+    #                     y=line_data["avg_kpi"].to_list(),
+    #                     name=band_sector_key,
+    #                     mode="lines",
+    #                     fill="tonexty",
+    #                     line=dict(color=color, width=2),
+    #                     fillcolor=color.replace(")", ", 0.3)").replace("rgb", "rgba"),
+    #                     hovertemplate="<b>%{fullData.name}</b><br>"
+    #                     + f"Date: %{{x|{hover_date_format}}}<br>"
+    #                     + f"{config['label']}: %{{y:{config['format']}}}<br>"
+    #                     + "<extra></extra>",
+    #                 )
+    #             )
+    #         else:
+    #             fig.add_trace(
+    #                 go.Scatter(
+    #                     x=x_data,
+    #                     y=line_data["avg_kpi"].to_list(),
+    #                     name=band_sector_key,
+    #                     mode="lines+markers",
+    #                     line=dict(color=color, width=4),
+    #                     marker=dict(size=8, color=color),
+    #                     hovertemplate="<b>%{fullData.name}</b><br>"
+    #                     + f"Date: %{{x|{hover_date_format}}}<br>"
+    #                     + f"{config['label']}: %{{y:{config['format']}}}<br>"
+    #                     + "<extra></extra>",
+    #                 )
+    #             )
+
+    #     fig.update_layout(
+    #         title_text=f"SECTOR - {sector_name}",
+    #         title_x=0.4,
+    #         title_font=dict(size=20, color="#000000"),
+    #         xaxis_title="",
+    #         yaxis_title=config["label"],
+    #         yaxis_title_font=dict(size=16, family="Arial, sans-serif"),
+    #         template="plotly_white",
+    #         font=dict(size=14, color="#000000"),
+    #         hovermode="x unified",
+    #         autosize=True,
+    #         legend=dict(
+    #             orientation="h",
+    #             yanchor="top",
+    #             y=-0.45,
+    #             xanchor="center",
+    #             x=0.5,
+    #             font=dict(size=12),
+    #             bgcolor=self.container_bg,
+    #             bordercolor=self.border_color,
+    #             borderwidth=1,
+    #         ),
+    #         width=600,
+    #         height=350,
+    #         margin=dict(l=80, r=80, t=40, b=40),
+    #         plot_bgcolor=self.silver_light_bg,
+    #         paper_bgcolor=self.silver_light_bg,
+    #     )
+
+    #     fig.update_xaxes(
+    #         showgrid=True,
+    #         gridwidth=1,
+    #         gridcolor=self.grid_color,
+    #         tickformat="%m/%d/%Y",
+    #         tickangle=-45,
+    #         tickfont=dict(size=14),
+    #         tickmode="auto",
+    #         linecolor=self.border_color,
+    #         linewidth=2,
+    #         mirror=True,
+    #         showline=True,
+    #     )
+
+    #     fig.update_yaxes(
+    #         showgrid=True,
+    #         gridwidth=1,
+    #         gridcolor=self.grid_color,
+    #         tickfont=dict(size=14),
+    #         linecolor=self.border_color,
+    #         linewidth=2,
+    #         mirror=True,
+    #         showline=True,
+    #     )
+
+    #     return fig
+
     def _create_sector_chart(
         self, df: pl.DataFrame, sector_name: str, kpi_name: str
     ) -> go.Figure:
@@ -397,46 +518,72 @@ class WDTAChartVisualizer:
         if sector_data.is_empty():
             return None
 
-        fig = go.Figure()
-        unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
         chart_type = config.get("chart_type", "line")
+        
+        # Convert to pandas for plotly express
+        sector_df = sector_data.to_pandas()
+        
+        # Determine x-axis column
+        if (
+            "date_parsed" in sector_df.columns
+            and sector_df["date_parsed"].notna().any()
+        ):
+            x_col = "date_parsed"
+        else:
+            x_col = "newwd_date"
 
-        for idx, band_sector_key in enumerate(unique_keys):
-            line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+        if chart_type == "area":
+            # Use plotly express for stacked area chart
+            fig = px.area(
+                sector_df,
+                x=x_col,
+                y="avg_kpi",
+                color="band_sector_key",  # This creates the line_group
+                line_group="band_sector_key",
+                color_discrete_sequence=self.color_palette,
+                labels={
+                    "avg_kpi": config["label"],
+                    x_col: "",
+                    "band_sector_key": ""
+                },
+                hover_data={
+                    x_col: "|%m/%d/%Y",
+                    "avg_kpi": f":{config['format']}",
+                    "band_sector_key": True
+                }
+            )
+            
+            # Update hover template for better formatting
+            fig.update_traces(
+                hovertemplate="<b>%{fullData.name}</b><br>"
+                + "Date: %{x|%m/%d/%Y}<br>"
+                + f"{config['label']}: %{{y:{config['format']}}}<br>"
+                + "<extra></extra>"
+            )
+            
+        else:
+            # Keep your existing line chart logic
+            fig = go.Figure()
+            unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
+            
+            for idx, band_sector_key in enumerate(unique_keys):
+                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
 
-            if line_data.is_empty():
-                continue
+                if line_data.is_empty():
+                    continue
 
-            color = self.color_palette[idx % len(self.color_palette)]
+                color = self.color_palette[idx % len(self.color_palette)]
 
-            if (
-                "date_parsed" in line_data.columns
-                and not line_data["date_parsed"].is_null().any()
-            ):
-                x_data = line_data["date_parsed"].to_list()
-                hover_date_format = "%m/%d/%Y"
-            else:
-                x_data = line_data["newwd_date"].to_list()
-                hover_date_format = "%s"
+                if (
+                    "date_parsed" in line_data.columns
+                    and not line_data["date_parsed"].is_null().any()
+                ):
+                    x_data = line_data["date_parsed"].to_list()
+                    hover_date_format = "%m/%d/%Y"
+                else:
+                    x_data = line_data["newwd_date"].to_list()
+                    hover_date_format = "%s"
 
-            # Area chart or Line chart
-            if chart_type == "area":
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_data,
-                        y=line_data["avg_kpi"].to_list(),
-                        name=band_sector_key,
-                        mode="lines",
-                        fill="tozeroy",
-                        line=dict(color=color, width=2),
-                        fillcolor=color.replace(")", ", 0.3)").replace("rgb", "rgba"),
-                        hovertemplate="<b>%{fullData.name}</b><br>"
-                        + f"Date: %{{x|{hover_date_format}}}<br>"
-                        + f"{config['label']}: %{{y:{config['format']}}}<br>"
-                        + "<extra></extra>",
-                    )
-                )
-            else:
                 fig.add_trace(
                     go.Scatter(
                         x=x_data,
@@ -452,6 +599,7 @@ class WDTAChartVisualizer:
                     )
                 )
 
+        # Apply common layout settings
         fig.update_layout(
             title_text=f"SECTOR - {sector_name}",
             title_x=0.4,
@@ -466,7 +614,7 @@ class WDTAChartVisualizer:
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.5,
+                y=-0.45,
                 xanchor="center",
                 x=0.5,
                 font=dict(size=12),
