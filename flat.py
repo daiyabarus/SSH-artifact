@@ -5,8 +5,9 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+# Konfigurasi
 CSV_FILE = 'tower_data.csv'
-FLATNESS_THRESHOLD = 0.1
+FLATNESS_THRESHOLD = 0.05
 MIN_DATA_POINTS = 5
 
 def load_and_prepare_data(file_path):
@@ -14,7 +15,7 @@ def load_and_prepare_data(file_path):
     df = pd.read_csv(file_path)
     df['Begin Time'] = pd.to_datetime(df['Begin Time'])
     df = df.sort_values(['towerid', 'Begin Time'])
-
+    
     return df
 
 def calculate_flatness_metrics(values):
@@ -88,59 +89,89 @@ def analyze_tower_data(df):
     
     return pd.DataFrame(results)
 
-def plot_tower_charts(df, tower_ids_to_plot=None, save_plots=True):
+def plot_individual_tower_charts(df, tower_ids_to_plot=None, output_folder='tower_charts'):
     """
-    Membuat line charts untuk tower IDs
-    Jika tower_ids_to_plot None, plot semua tower
+    Membuat line chart terpisah untuk setiap tower ID
+    Setiap tower disimpan sebagai file gambar tersendiri
     """
+    import os
+    
     if tower_ids_to_plot is None:
         tower_ids_to_plot = df['towerid'].unique()
-    if len(tower_ids_to_plot) > 50:
-        print(f"Warning: Terlalu banyak tower ({len(tower_ids_to_plot)}). Hanya plot 50 pertama.")
-        tower_ids_to_plot = tower_ids_to_plot[:50]
-    n_towers = len(tower_ids_to_plot)
-    n_cols = 3
-    n_rows = (n_towers + n_cols - 1) // n_cols
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 5*n_rows))
+    # Buat folder output jika belum ada
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"✓ Folder '{output_folder}' dibuat")
     
-    if n_rows == 1 and n_cols == 1:
-        axes = [axes]
-    else:
-        axes = axes.flatten() if n_rows > 1 else [axes] if n_cols == 1 else axes
+    total_towers = len(tower_ids_to_plot)
+    print(f"   Membuat {total_towers} grafik individual...")
     
-    for idx, tower_id in enumerate(tower_ids_to_plot):
-        ax = axes[idx]
+    for idx, tower_id in enumerate(tower_ids_to_plot, 1):
         tower_data = df[df['towerid'] == tower_id].sort_values('Begin Time')
         
+        # Hitung metrik
+        values = tower_data['Maximum Receive Speed(Kbps)'].values
+        is_flat, cv, std_dev, mean_val = calculate_flatness_metrics(values)
+        
+        # Buat figure baru untuk setiap tower
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Plot line chart
         ax.plot(tower_data['Begin Time'], 
                 tower_data['Maximum Receive Speed(Kbps)'], 
-                marker='o', linewidth=2, markersize=4)
+                marker='o', linewidth=2.5, markersize=6,
+                color='red' if is_flat else 'blue',
+                label='Max Receive Speed')
         
-        values = tower_data['Maximum Receive Speed(Kbps)'].values
-        is_flat, cv, _, mean_val = calculate_flatness_metrics(values)
+        # Tambahkan reference line untuk mean
+        ax.axhline(y=mean_val, color='orange', linestyle='--', 
+                   alpha=0.7, linewidth=2, label=f'Mean: {mean_val:.0f} Kbps')
         
-        ax.set_title(f'{tower_id}\n{"[FLAT]" if is_flat else "[NORMAL]"} CV: {cv:.4f}', 
-                     fontsize=10, fontweight='bold',
-                     color='red' if is_flat else 'green')
-        ax.set_xlabel('Time', fontsize=8)
-        ax.set_ylabel('Speed (Kbps)', fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.tick_params(axis='x', rotation=45, labelsize=7)
-        ax.tick_params(axis='y', labelsize=7)
+        # Styling
+        status = "FLAT" if is_flat else "NORMAL"
+        title_color = 'red' if is_flat else 'green'
         
-        ax.axhline(y=mean_val, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+        ax.set_title(f'Tower ID: {tower_id} - Status: [{status}]\n'
+                     f'CV: {cv:.4f} | Std Dev: {std_dev:.2f} | Mean: {mean_val:.2f} Kbps',
+                     fontsize=14, fontweight='bold', color=title_color, pad=20)
+        
+        ax.set_xlabel('Begin Time', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Maximum Receive Speed (Kbps)', fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3, linestyle='--')
+        ax.legend(loc='best', fontsize=10)
+        
+        # Rotate x-axis labels
+        plt.xticks(rotation=45, ha='right')
+        
+        # Tambahkan info box
+        info_text = f'Data Points: {len(values)}\n'
+        info_text += f'Min: {np.min(values):.0f} Kbps\n'
+        info_text += f'Max: {np.max(values):.0f} Kbps\n'
+        info_text += f'Range: {np.max(values) - np.min(values):.0f} Kbps'
+        
+        ax.text(0.02, 0.98, info_text,
+                transform=ax.transAxes,
+                fontsize=9,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.tight_layout()
+        
+        # Simpan dengan nama file yang clean
+        safe_filename = str(tower_id).replace('/', '_').replace('\\', '_').replace(' ', '_')
+        status_prefix = 'FLAT_' if is_flat else 'NORMAL_'
+        filename = f"{output_folder}/{status_prefix}{safe_filename}.png"
+        
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.close(fig)  # Tutup figure untuk menghemat memory
+        
+        # Progress indicator
+        if idx % 10 == 0 or idx == total_towers:
+            print(f"   Progress: {idx}/{total_towers} grafik selesai")
     
-    for idx in range(len(tower_ids_to_plot), len(axes)):
-        axes[idx].set_visible(False)
-    
-    plt.tight_layout()
-    
-    if save_plots:
-        plt.savefig('tower_analysis_charts.png', dpi=150, bbox_inches='tight')
-        print("✓ Charts disimpan ke 'tower_analysis_charts.png'")
-    
-    plt.show()
+    print(f"\n✓ Semua grafik disimpan di folder '{output_folder}/'")
+    print(f"   Total file: {total_towers} gambar")
 
 def generate_report(analysis_df):
     """Generate laporan analisa"""
@@ -174,6 +205,7 @@ def generate_report(analysis_df):
     print(f"Average CV (Normal towers): {normal_towers['coefficient_of_variation'].mean():.4f}" if len(normal_towers) > 0 else "No normal towers")
     print(f"Threshold yang digunakan: {FLATNESS_THRESHOLD}")
     
+    # Simpan hasil ke CSV
     analysis_df.to_csv('tower_analysis_results.csv', index=False)
     flat_towers.to_csv('flat_towers_only.csv', index=False)
     print("\n✓ Hasil disimpan ke 'tower_analysis_results.csv' dan 'flat_towers_only.csv'")
@@ -182,23 +214,25 @@ def main():
     """Fungsi utama"""
     print("Memulai analisa tower data...")
     
+    # Load data
     print(f"\n1. Loading data dari '{CSV_FILE}'...")
     df = load_and_prepare_data(CSV_FILE)
     print(f"   ✓ Data loaded: {len(df)} rows, {df['towerid'].nunique()} unique towers")
+    
+    # Analisa
     print("\n2. Menganalisa setiap tower...")
     analysis_df = analyze_tower_data(df)
     print(f"   ✓ Analisa selesai")
+    
+    # Generate report
     print("\n3. Generate laporan...")
     generate_report(analysis_df)
     
-    print("\n4. Membuat visualisasi charts...")
-    flat_tower_ids = analysis_df[analysis_df['is_flat'] == True]['towerid'].values
-    
-    if len(flat_tower_ids) > 0:
-        print(f"   Plotting {len(flat_tower_ids)} tower dengan kondisi FLAT...")
-        plot_tower_charts(df, flat_tower_ids, save_plots=True)
-    else:
-        print("   Tidak ada tower dengan kondisi flat untuk divisualisasi")
+    # Plot charts - SEMUA tower, satu file per tower
+    print("\n4. Membuat visualisasi charts individual untuk SEMUA tower...")
+    all_tower_ids = df['towerid'].unique()
+    print(f"   Total tower untuk divisualisasi: {len(all_tower_ids)}")
+    plot_individual_tower_charts(df, all_tower_ids, output_folder='tower_charts')
     
     print("\n" + "="*80)
     print("ANALISA SELESAI!")
