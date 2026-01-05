@@ -47,7 +47,6 @@ class TabRenderer(ABC):
         """Show consistent empty state UI"""
         st.warning(f"⚠️ {message}")
 
-
 class MetricsRenderer:
     """
     Single Responsibility: Handle metrics display
@@ -76,7 +75,6 @@ class MetricsRenderer:
                     delta=metric.get("delta"),
                 )
         style_metric_cards()
-
 
 class DataValidator:
     """

@@ -284,7 +284,7 @@ class TADistributionVisualizer:
                 css_styles=f"""
                 {{
                     background-color: {self.BACKGROUND_COLOR};
-                    border: 2px solid {self.BORDER_COLOR};
+                    border: 4px solid {self.BORDER_COLOR};
                     border-radius: 0.5rem;
                     padding: calc(1em - 1px);
                     margin-bottom: 1rem;    

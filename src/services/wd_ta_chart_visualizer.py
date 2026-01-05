@@ -706,7 +706,7 @@ class WDTAChartVisualizer:
                             css_styles=f"""
                             {{
                                 background-color: {self.silver_light_bg};
-                                border: 2px solid {self.border_color};
+                                border: 4px solid {self.border_color};
                                 border-radius: 0.5rem;
                                 padding: calc(1em - 1px);
                                 margin-bottom: 1rem;    
