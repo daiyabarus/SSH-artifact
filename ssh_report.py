@@ -153,30 +153,30 @@ class SSHReportGenerator:
         self._clean_outer_axis(ax1)
         if bh_merged is not None and not bh_merged.empty:
             self._plot_cqi_on_axis(ax1, bh_merged)
-            ax1.set_title("CQI - Busy Hour", fontsize=14, fontweight='bold', pad=20)
+            ax1.set_title("CQI - Busy Hour", fontsize=16, fontweight='bold', pad=20)
         else:
             ax1.text(0.5, 0.5, "No CQI Data Available", ha='center', va='center', transform=ax1.transAxes, fontsize=12, style='italic')
-            ax1.set_title("CQI - Busy Hour", fontsize=14, fontweight='bold', pad=20)
+            ax1.set_title("CQI - Busy Hour", fontsize=16, fontweight='bold', pad=20)
         
         # Row 2: Spectral Efficiency Chart
         ax2 = fig.add_subplot(gs[1])
         self._clean_outer_axis(ax2)
         if wd_merged is not None and not wd_merged.empty:
             self._plot_spectral_efficiency_on_axis(ax2, wd_merged)
-            ax2.set_title("Spectral Efficiency - Daily", fontsize=14, fontweight='bold', pad=20)
+            ax2.set_title("Spectral Efficiency - Daily", fontsize=16, fontweight='bold', pad=20)
         else:
             ax2.text(0.5, 0.5, "No Spectral Efficiency Data Available", ha='center', va='center', transform=ax2.transAxes, fontsize=12, style='italic')
-            ax2.set_title("Spectral Efficiency - Daily", fontsize=14, fontweight='bold', pad=20)
+            ax2.set_title("Spectral Efficiency - Daily", fontsize=16, fontweight='bold', pad=20)
         
         # Row 3: QPSK Chart
         ax3 = fig.add_subplot(gs[2])
         self._clean_outer_axis(ax3)
         if bh_merged is not None and not bh_merged.empty:
             self._plot_qpsk_on_axis(ax3, bh_merged)
-            ax3.set_title("QPSK Rate - Busy Hour", fontsize=14, fontweight='bold', pad=20)
+            ax3.set_title("QPSK Rate - Busy Hour", fontsize=16, fontweight='bold', pad=20)
         else:
             ax3.text(0.5, 0.5, "No QPSK Data Available", ha='center', va='center', transform=ax3.transAxes, fontsize=12, style='italic')
-            ax3.set_title("QPSK Rate - Busy Hour", fontsize=14, fontweight='bold', pad=20)
+            ax3.set_title("QPSK Rate - Busy Hour", fontsize=16, fontweight='bold', pad=20)
         
         # Row 4: Timing Advance Chart
         ax4 = fig.add_subplot(gs[3])
@@ -191,7 +191,7 @@ class SSHReportGenerator:
         # main_title = f"Trend Charts \nCluster: {cluster} | Tower: {tower}"
         # fig.suptitle(main_title, fontsize=16, fontweight='bold', y=0.98)
         
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.tight_layout(rect=[0, 0, 1, 1])
         
         buf = BytesIO()
         fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
@@ -947,9 +947,9 @@ class SSHReportGenerator:
         print(f"{'='*60}")
 
 def main():
-    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\"
+    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260106\\"
     TEMPLATE_PATH = "./template.xlsx"
-    OUTPUT_FOLDER = "./output_reports"
+    OUTPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260106\\output_reports\\"
     DB_PATH = "./newdatabase.db"
     
     generator = SSHReportGenerator(INPUT_FOLDER, TEMPLATE_PATH, OUTPUT_FOLDER, DB_PATH)
