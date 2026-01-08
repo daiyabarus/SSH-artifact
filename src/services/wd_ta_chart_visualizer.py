@@ -519,10 +519,10 @@ class WDTAChartVisualizer:
             return None
 
         chart_type = config.get("chart_type", "line")
-        
+
         # Convert to pandas for plotly express
         sector_df = sector_data.to_pandas()
-        
+
         # Determine x-axis column
         if (
             "date_parsed" in sector_df.columns
@@ -541,18 +541,14 @@ class WDTAChartVisualizer:
                 color="band_sector_key",  # This creates the line_group
                 line_group="band_sector_key",
                 color_discrete_sequence=self.color_palette,
-                labels={
-                    "avg_kpi": config["label"],
-                    x_col: "",
-                    "band_sector_key": ""
-                },
+                labels={"avg_kpi": config["label"], x_col: "", "band_sector_key": ""},
                 hover_data={
                     x_col: "|%m/%d/%Y",
                     "avg_kpi": f":{config['format']}",
-                    "band_sector_key": True
-                }
+                    "band_sector_key": True,
+                },
             )
-            
+
             # Update hover template for better formatting
             fig.update_traces(
                 hovertemplate="<b>%{fullData.name}</b><br>"
@@ -560,14 +556,16 @@ class WDTAChartVisualizer:
                 + f"{config['label']}: %{{y:{config['format']}}}<br>"
                 + "<extra></extra>"
             )
-            
+
         else:
             # Keep your existing line chart logic
             fig = go.Figure()
             unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
-            
+
             for idx, band_sector_key in enumerate(unique_keys):
-                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+                line_data = sector_data.filter(
+                    pl.col("band_sector_key") == band_sector_key
+                )
 
                 if line_data.is_empty():
                     continue

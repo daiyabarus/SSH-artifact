@@ -47,6 +47,7 @@ class TabRenderer(ABC):
         """Show consistent empty state UI"""
         st.warning(f"⚠️ {message}")
 
+
 class MetricsRenderer:
     """
     Single Responsibility: Handle metrics display
@@ -76,6 +77,7 @@ class MetricsRenderer:
                 )
         style_metric_cards()
 
+
 class DataValidator:
     """
     Single Responsibility: Validate dashboard inputs
@@ -104,6 +106,7 @@ class DataValidator:
             st.warning(f"⚠️ No {name} available")
             return False
         return True
+
 
 class CoverageTabRenderer(TabRenderer):
     """Render Coverage Map & TA Distribution tab"""
@@ -147,6 +150,7 @@ class CoverageTabRenderer(TabRenderer):
 
         with st.spinner("📊 Generating TA distribution charts..."):
             visualizer.display_sector_charts_in_rows(df_ta_distribution, selected_tower)
+
 
 class DailyStatisticsTabRenderer(TabRenderer):
     """Render Daily Statistics (WD+TA) tab"""
@@ -194,6 +198,7 @@ class DailyStatisticsTabRenderer(TabRenderer):
         MetricsRenderer.render_metric_grid(metrics, columns=4)
         st.markdown("---")
 
+
 class BusyHourTabRenderer(TabRenderer):
     """Render Busy Hour Statistics (BH+TA) tab"""
 
@@ -240,6 +245,7 @@ class BusyHourTabRenderer(TabRenderer):
         MetricsRenderer.render_metric_grid(metrics, columns=4)
         st.markdown("---")
 
+
 class HourlyStatisticsTabRenderer(TabRenderer):
     """Render Hourly Statistics (LTE Hourly) tab"""
 
@@ -250,9 +256,7 @@ class HourlyStatisticsTabRenderer(TabRenderer):
     def render(self, tower_ids: List[str], start_date: datetime, end_date: datetime):
         """Render LTE Hourly analytics with KPI charts"""
         with st.spinner("🔄 Loading hourly statistics..."):
-            df = self.data_service.get_lte_hourly_data(
-                tower_ids, start_date, end_date
-            )
+            df = self.data_service.get_lte_hourly_data(tower_ids, start_date, end_date)
 
         if not DataValidator.validate_dataframe(df, "hourly statistics"):
             return
@@ -311,6 +315,7 @@ class HourlyStatisticsTabRenderer(TabRenderer):
 
         st.markdown("---")
 
+
 class DataTablesTabRenderer(TabRenderer):
     """Render Data Tables & Configuration tab"""
 
@@ -365,7 +370,7 @@ class DataTablesTabRenderer(TabRenderer):
 
         # Using dataframe_explorer for better UX
         filtered_df = dataframe_explorer(df.to_pandas(), case=False)
-        st.dataframe(filtered_df, width='stretch', height=500)
+        st.dataframe(filtered_df, width="stretch", height=500)
 
     def _render_bh_ta_table(
         self, tower_ids: List[str], start_date: datetime, end_date: datetime
@@ -384,7 +389,7 @@ class DataTablesTabRenderer(TabRenderer):
         )
 
         filtered_df = dataframe_explorer(df.to_pandas(), case=False)
-        st.dataframe(filtered_df, width='stretch', height=500)
+        st.dataframe(filtered_df, width="stretch", height=500)
 
     def _render_configuration_tables(self, tower_ids: List[str]):
         """Render Configuration tables (SCOT, GCELL)"""
@@ -398,7 +403,7 @@ class DataTablesTabRenderer(TabRenderer):
             st.markdown("#### 📍 SCOT Data")
             if not df_scot.is_empty():
                 st.success(f"✅ {len(df_scot)} records")
-                st.dataframe(df_scot.to_pandas(), width='stretch', height=400)
+                st.dataframe(df_scot.to_pandas(), width="stretch", height=400)
             else:
                 st.info("No SCOT data available")
 
@@ -406,9 +411,7 @@ class DataTablesTabRenderer(TabRenderer):
             st.markdown("#### 📡 GCELL Data")
             if not df_gcell.is_empty():
                 st.success(f"✅ {len(df_gcell)} records")
-                st.dataframe(
-                    df_gcell.to_pandas(), width='stretch', height=400
-                )
+                st.dataframe(df_gcell.to_pandas(), width="stretch", height=400)
             else:
                 st.info("No GCELL data available")
 
@@ -423,7 +426,7 @@ class DataTablesTabRenderer(TabRenderer):
                 "👇 **Table**: GCELL + SCOT + TA (joined on moentity=eutrancell=cell)"
             )
             filtered_df = dataframe_explorer(df_joined.to_pandas(), case=False)
-            st.dataframe(filtered_df, width='stretch', height=500)
+            st.dataframe(filtered_df, width="stretch", height=500)
         else:
             st.warning("⚠️ No joined configuration data available")
 
@@ -440,7 +443,7 @@ class DataTablesTabRenderer(TabRenderer):
 
         st.success(f"✅ Loaded {len(df):,} records")
         filtered_df = dataframe_explorer(df.to_pandas(), case=False)
-        st.dataframe(filtered_df, width='stretch', height=500)
+        st.dataframe(filtered_df, width="stretch", height=500)
 
 
 class Dashboard:
@@ -463,7 +466,6 @@ class Dashboard:
         self.busy_hour_tab = BusyHourTabRenderer(data_service)
         self.hourly_stats_tab = HourlyStatisticsTabRenderer(data_service)
         self.data_tables_tab = DataTablesTabRenderer(data_service)
-        
 
     def render(self, tower_ids: List[str], start_date: datetime, end_date: datetime):
         """
@@ -521,5 +523,3 @@ class Dashboard:
         return DataValidator.validate_tower_selection(
             tower_ids
         ) and DataValidator.validate_date_range(start_date, end_date)
-
-

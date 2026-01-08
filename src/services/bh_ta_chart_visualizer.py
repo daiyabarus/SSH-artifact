@@ -188,7 +188,7 @@ class BHTAChartVisualizer:
                 "format": ".2f",
                 "is_percent": True,
                 "chart_type": "line",
-            }
+            },
         }
 
     def _clean_numeric_column(self, df: pl.DataFrame, col_name: str) -> pl.DataFrame:
@@ -396,7 +396,9 @@ class BHTAChartVisualizer:
 
         return chart_data
 
-    def _prepare_tower_chart_data(self, df: pl.DataFrame, kpi_name: str) -> pl.DataFrame:
+    def _prepare_tower_chart_data(
+        self, df: pl.DataFrame, kpi_name: str
+    ) -> pl.DataFrame:
         """
         ✅ NEW: Prepare data for tower-based KPI chart (aggregated by tower+date)
         Used for throughput charts that show tower-level trends
@@ -409,10 +411,10 @@ class BHTAChartVisualizer:
         # Clean numerator and denominator columns
         num_col = config["num"]
         den_col = config["den"]
-        
+
         df = self._clean_numeric_column(df, num_col)
         df = self._clean_numeric_column(df, den_col)
-        
+
         # Parse dates
         df = self._parse_dates_safely(df)
         date_col = "date_parsed" if "date_parsed" in df.columns else "newbh_date"
@@ -420,24 +422,30 @@ class BHTAChartVisualizer:
         # Aggregate by tower and date - sum numerators and denominators
         chart_data = (
             df.group_by([date_col, "newbh_enodeb_fdd_msc"])
-            .agg([
-                pl.col(num_col).sum().alias("total_num"),
-                pl.col(den_col).sum().alias("total_den"),
-                pl.col("newbh_date").first().alias("newbh_date"),
-            ])
+            .agg(
+                [
+                    pl.col(num_col).sum().alias("total_num"),
+                    pl.col(den_col).sum().alias("total_den"),
+                    pl.col("newbh_date").first().alias("newbh_date"),
+                ]
+            )
             .sort(date_col)
         )
 
         # Calculate KPI from aggregated values
         is_percent = config.get("is_percent", False)
         multiplier = 100 if is_percent else 1
-        
-        chart_data = chart_data.with_columns([
-            pl.when((pl.col("total_den").is_not_null()) & (pl.col("total_den") != 0))
-            .then((pl.col("total_num") / pl.col("total_den")) * multiplier)
-            .otherwise(None)
-            .alias("avg_kpi")
-        ])
+
+        chart_data = chart_data.with_columns(
+            [
+                pl.when(
+                    (pl.col("total_den").is_not_null()) & (pl.col("total_den") != 0)
+                )
+                .then((pl.col("total_num") / pl.col("total_den")) * multiplier)
+                .otherwise(None)
+                .alias("avg_kpi")
+            ]
+        )
 
         return chart_data
 
@@ -465,7 +473,7 @@ class BHTAChartVisualizer:
         if chart_type == "area":
             # Convert to pandas for plotly express
             sector_df = sector_data.to_pandas()
-            
+
             # Use plotly express for stacked area chart
             fig = px.area(
                 sector_df,
@@ -474,13 +482,9 @@ class BHTAChartVisualizer:
                 color="band_sector_key",
                 line_group="band_sector_key",
                 color_discrete_sequence=self.color_palette,
-                labels={
-                    "avg_kpi": config["label"],
-                    x_col: "",
-                    "band_sector_key": ""
-                },
+                labels={"avg_kpi": config["label"], x_col: "", "band_sector_key": ""},
             )
-            
+
             # Update hover template for better formatting
             fig.update_traces(
                 hovertemplate="<b>%{fullData.name}</b><br>"
@@ -494,7 +498,9 @@ class BHTAChartVisualizer:
             unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
 
             for idx, band_sector_key in enumerate(unique_keys):
-                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+                line_data = sector_data.filter(
+                    pl.col("band_sector_key") == band_sector_key
+                )
 
                 if line_data.is_empty():
                     continue
@@ -580,7 +586,7 @@ class BHTAChartVisualizer:
         ✅ UPDATED: Added reference lines for throughput thresholds
         """
         config = self.kpi_configs[kpi_name]
-        
+
         if df.is_empty():
             return None
 
@@ -621,7 +627,7 @@ class BHTAChartVisualizer:
             "dl_user_throughput": 3.0,
             "ul_user_throughput": 1.0,
         }
-        
+
         if kpi_name in reference_values:
             threshold = reference_values[kpi_name]
             fig.add_hline(
@@ -631,7 +637,11 @@ class BHTAChartVisualizer:
                 line_width=4,
             )
 
-        tower_display = ", ".join(unique_towers) if len(unique_towers) <= 3 else f"{len(unique_towers)} Towers"
+        tower_display = (
+            ", ".join(unique_towers)
+            if len(unique_towers) <= 3
+            else f"{len(unique_towers)} Towers"
+        )
 
         fig.update_layout(
             title_text=f"{config['label']} - {tower_display}",
@@ -771,7 +781,11 @@ class BHTAChartVisualizer:
         config = self.kpi_configs[kpi_name]
         unique_towerid = chart_data["newbh_enodeb_fdd_msc"].unique().sort().to_list()
 
-        tower_display = ", ".join(unique_towerid) if len(unique_towerid) <= 3 else f"{len(unique_towerid)} Towers"
+        tower_display = (
+            ", ".join(unique_towerid)
+            if len(unique_towerid) <= 3
+            else f"{len(unique_towerid)} Towers"
+        )
 
         st.markdown(f"### 📊 {config['label']} Busy Hour - {tower_display}")
 
@@ -801,7 +815,7 @@ class BHTAChartVisualizer:
 
         self.render_tower_throughput_chart(df, "dl_user_throughput")
         self.render_tower_throughput_chart(df, "ul_user_throughput")
-        
+
         all_kpis = [
             "dl_user_throughput",
             "ul_user_throughput",

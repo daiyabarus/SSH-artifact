@@ -277,10 +277,10 @@ class LTEHourlyVisualizer:
                 labels={
                     "avg_kpi": config["label"],
                     "lte_hour_begin_time": "",
-                    "band_sector_key": ""
+                    "band_sector_key": "",
                 },
             )
-            
+
             # Update hover template for better formatting
             fig.update_traces(
                 hovertemplate="<b>%{fullData.name}</b><br>"
@@ -294,7 +294,9 @@ class LTEHourlyVisualizer:
             unique_keys = sector_data["band_sector_key"].unique().sort().to_list()
 
             for idx, band_sector_key in enumerate(unique_keys):
-                line_data = sector_data.filter(pl.col("band_sector_key") == band_sector_key)
+                line_data = sector_data.filter(
+                    pl.col("band_sector_key") == band_sector_key
+                )
 
                 if line_data.is_empty():
                     continue
@@ -469,9 +471,17 @@ class LTEHourlyVisualizer:
                     available_kpis.append(kpi)
             else:
                 # Check if all required num/den columns exist
-                num_cols = config["num"] if isinstance(config["num"], list) else [config["num"]]
-                den_cols = config["den"] if isinstance(config["den"], list) else [config["den"]]
-                
+                num_cols = (
+                    config["num"]
+                    if isinstance(config["num"], list)
+                    else [config["num"]]
+                )
+                den_cols = (
+                    config["den"]
+                    if isinstance(config["den"], list)
+                    else [config["den"]]
+                )
+
                 if all(col in df.columns for col in num_cols + den_cols):
                     available_kpis.append(kpi)
 
@@ -496,7 +506,7 @@ class LTEHourlyVisualizer:
 
         try:
             col_dtype = df[col_name].dtype
-            
+
             # Already numeric - just ensure Float64
             if col_dtype in [pl.Int64, pl.Int32, pl.Float64, pl.Float32]:
                 df = df.with_columns(
@@ -504,7 +514,7 @@ class LTEHourlyVisualizer:
                 )
                 logger.debug(f"✅ Column {col_name} already numeric, cast to Float64")
                 return df
-            
+
             # String type - needs cleaning
             if col_dtype == pl.Utf8:
                 df = df.with_columns(
@@ -518,25 +528,23 @@ class LTEHourlyVisualizer:
                 )
                 logger.debug(f"✅ Cleaned string column {col_name}")
                 return df
-            
+
             # Null type - cast to Float64
             if col_dtype == pl.Null:
-                df = df.with_columns(
-                    pl.lit(None).cast(pl.Float64).alias(col_name)
-                )
+                df = df.with_columns(pl.lit(None).cast(pl.Float64).alias(col_name))
                 logger.debug(f"⚠️ Column {col_name} is all nulls")
                 return df
-            
+
             # Other types - try casting
             df = df.with_columns(
                 pl.col(col_name).cast(pl.Float64, strict=False).alias(col_name)
             )
             logger.debug(f"✅ Cast column {col_name} from {col_dtype} to Float64")
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Could not clean column {col_name}: {e}")
             df = df.with_columns(pl.lit(None).cast(pl.Float64).alias(col_name))
-        
+
         return df
 
     def _calculate_kpi(
@@ -563,7 +571,7 @@ class LTEHourlyVisualizer:
                     logger.error(f"❌ Missing numerator column: {nc}")
                     return df.with_columns(pl.lit(None).alias("kpi_value"))
                 df = self._clean_numeric_column(df, nc)
-                
+
             for dc in den_col:
                 if dc not in df.columns:
                     logger.error(f"❌ Missing denominator column: {dc}")
@@ -589,17 +597,19 @@ class LTEHourlyVisualizer:
             if num_col not in df.columns:
                 logger.error(f"❌ Missing numerator column: {num_col}")
                 return df.with_columns(pl.lit(None).alias("kpi_value"))
-                
+
             if den_col not in df.columns:
                 logger.error(f"❌ Missing denominator column: {den_col}")
                 return df.with_columns(pl.lit(None).alias("kpi_value"))
 
             df = self._clean_numeric_column(df, num_col)
             df = self._clean_numeric_column(df, den_col)
-            
+
             num_nulls = df.select(pl.col(num_col).null_count()).item()
             den_nulls = df.select(pl.col(den_col).null_count()).item()
-            logger.debug(f"📊 {num_col}: {num_nulls} nulls, {den_col}: {den_nulls} nulls")
+            logger.debug(
+                f"📊 {num_col}: {num_nulls} nulls, {den_col}: {den_nulls} nulls"
+            )
 
             # Calculate KPI
             if is_percent:
@@ -616,7 +626,7 @@ class LTEHourlyVisualizer:
                 )
 
             df = df.with_columns(expr.alias("kpi_value"))
-            
+
             # DEBUG: Check KPI values
             kpi_nulls = df.select(pl.col("kpi_value").null_count()).item()
             logger.debug(f"📊 KPI calculated: {kpi_nulls} nulls out of {len(df)} rows")
@@ -633,7 +643,7 @@ class LTEHourlyVisualizer:
             return pl.DataFrame()
 
         logger.info(f"📊 Preparing chart data for KPI: {kpi_name}")
-        
+
         # Verify required columns exist
         if "col" in config:
             if config["col"] not in df.columns:
@@ -641,14 +651,18 @@ class LTEHourlyVisualizer:
                 return pl.DataFrame()
         else:
             # Check num/den columns
-            num_cols = config["num"] if isinstance(config["num"], list) else [config["num"]]
-            den_cols = config["den"] if isinstance(config["den"], list) else [config["den"]]
-            
+            num_cols = (
+                config["num"] if isinstance(config["num"], list) else [config["num"]]
+            )
+            den_cols = (
+                config["den"] if isinstance(config["den"], list) else [config["den"]]
+            )
+
             missing_cols = []
             for col in num_cols + den_cols:
                 if col not in df.columns:
                     missing_cols.append(col)
-            
+
             if missing_cols:
                 logger.error(f"❌ Missing columns for {kpi_name}: {missing_cols}")
                 return pl.DataFrame()
@@ -669,8 +683,10 @@ class LTEHourlyVisualizer:
         before_filter = len(chart_df)
         chart_df = chart_df.filter(pl.col("kpi_value").is_not_null())
         after_filter = len(chart_df)
-        
-        logger.info(f"📊 KPI filtering: {before_filter} → {after_filter} rows (removed {before_filter - after_filter} nulls)")
+
+        logger.info(
+            f"📊 KPI filtering: {before_filter} → {after_filter} rows (removed {before_filter - after_filter} nulls)"
+        )
 
         if chart_df.is_empty():
             logger.warning(f"⚠️ No valid data for KPI {kpi_name} after filtering")
@@ -705,13 +721,16 @@ class LTEHourlyVisualizer:
                 .agg(agg_columns)
                 .sort("lte_hour_begin_time")
             )
-            
-            logger.info(f"✅ Chart data prepared: {len(chart_data)} rows for {kpi_name}")
-            
+
+            logger.info(
+                f"✅ Chart data prepared: {len(chart_data)} rows for {kpi_name}"
+            )
+
             return chart_data
-            
+
         except Exception as e:
             logger.error(f"❌ Error aggregating data for {kpi_name}: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return pl.DataFrame()

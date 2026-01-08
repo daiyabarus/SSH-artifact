@@ -245,7 +245,7 @@ class DataRepository:
         date_col = self._settings.DATE_COLUMNS[table]
 
         tower_filter = self._build_tower_filter(tower_ids, tower_col)
-        
+
         # Query with correlated subquery to get max date per tower
         query = f"""
         SELECT t.*
@@ -267,15 +267,19 @@ class DataRepository:
         logger.info(f"TA MAX DATE Query")
         df = self._query_builder.to_dataframe(query, engine="polars")
         logger.info(f"TA Data fetched (latest date per tower): {len(df)} rows")
-        
+
         if not df.is_empty() and date_col in df.columns:
             unique_dates = df.select(pl.col(date_col).n_unique()).item()
-            date_range = df.select([
-                pl.col(date_col).min().alias("min_date"),
-                pl.col(date_col).max().alias("max_date")
-            ]).to_dicts()[0]
-            logger.info(f"TA Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)")
-        
+            date_range = df.select(
+                [
+                    pl.col(date_col).min().alias("min_date"),
+                    pl.col(date_col).max().alias("max_date"),
+                ]
+            ).to_dicts()[0]
+            logger.info(
+                f"TA Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)"
+            )
+
         return df
 
     def fetch_kqi_data_all(self, tower_ids: List[str]) -> pl.DataFrame:
@@ -310,15 +314,19 @@ class DataRepository:
         logger.info(f"KQI MAX DATE Query")
         df = self._query_builder.to_dataframe(query, engine="polars")
         logger.info(f"KQI Data fetched (latest date per tower): {len(df)} rows")
-        
+
         if not df.is_empty() and date_col in df.columns:
             unique_dates = df.select(pl.col(date_col).n_unique()).item()
-            date_range = df.select([
-                pl.col(date_col).min().alias("min_date"),
-                pl.col(date_col).max().alias("max_date")
-            ]).to_dicts()[0]
-            logger.info(f"KQI Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)")
-        
+            date_range = df.select(
+                [
+                    pl.col(date_col).min().alias("min_date"),
+                    pl.col(date_col).max().alias("max_date"),
+                ]
+            ).to_dicts()[0]
+            logger.info(
+                f"KQI Date range: {date_range['min_date']} to {date_range['max_date']} ({unique_dates} unique dates)"
+            )
+
         return df
 
     def fetch_scot_data(self, tower_ids: List[str]) -> pl.DataFrame:
@@ -456,11 +464,11 @@ class DataRepository:
         logger.info(f"TA Distribution MAX DATE Query (with explicit columns)")
         df = self._query_builder.to_dataframe(query, engine="polars")
         logger.info(f"TA Distribution Data fetched (latest date): {len(df)} rows")
-        
+
         if not df.is_empty() and "newta_date" in df.columns:
             unique_dates = df.select(pl.col("newta_date").n_unique()).item()
             logger.info(f"TA Distribution unique dates: {unique_dates}")
-        
+
         return df
 
     def fetch_wd_ta_separate(
@@ -611,7 +619,9 @@ class DataRepository:
 
         logger.info(f"🔍 WHERE clause: {where}")
 
-        query = f"SELECT * FROM {table} WHERE {where} ORDER BY {date_col}, lte_hour_cell_id"
+        query = (
+            f"SELECT * FROM {table} WHERE {where} ORDER BY {date_col}, lte_hour_cell_id"
+        )
 
         try:
             import sqlite3
@@ -619,16 +629,16 @@ class DataRepository:
             # ===== METHOD 1: Direct Polars Read (Preferred) =====
             # This bypasses pandas entirely and reads directly with Polars
             conn_uri = f"sqlite:///{self._query_builder.db_path}"
-            
+
             try:
                 logger.info("🚀 Attempting direct Polars read_database...")
                 df = pl.read_database(query, connection=conn_uri)
                 logger.info(f"✅ Direct Polars read successful: {len(df)} rows")
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Direct Polars read failed: {e}")
                 logger.info("🔄 Falling back to SQLite connector...")
-                
+
                 # ===== METHOD 2: Using SQLite Connector =====
                 conn = sqlite3.connect(self._query_builder.db_path)
                 df = pl.read_database(query, connection=conn)
@@ -641,7 +651,11 @@ class DataRepository:
 
             # Log sample data
             if len(df) > 0:
-                sample_cols = [tower_col, 'lte_hour_cell_id'] if tower_col in df.columns else df.columns[:3]
+                sample_cols = (
+                    [tower_col, "lte_hour_cell_id"]
+                    if tower_col in df.columns
+                    else df.columns[:3]
+                )
                 logger.info(f"📝 Sample data:\n{df.select(sample_cols).head(3)}")
 
             # Process the data
@@ -655,6 +669,7 @@ class DataRepository:
         except Exception as e:
             logger.error(f"❌ Error fetching LTE Hourly data: {e}")
             import traceback
+
             logger.error(f"🔍 Stack trace:\n{traceback.format_exc()}")
             return pl.DataFrame()
 
@@ -673,55 +688,53 @@ class DataRepository:
         for col in datetime_cols:
             if col not in df.columns:
                 continue
-                
+
             try:
                 if df[col].dtype == pl.Datetime:
                     logger.debug(f"✅ {col} already datetime")
                     continue
-                    
+
                 df = df.with_columns(
-                    pl.col(col).str.strptime(
-                        pl.Datetime, 
-                        "%Y-%m-%d %H:%M:%S", 
-                        strict=False
-                    ).alias(col)
+                    pl.col(col)
+                    .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
+                    .alias(col)
                 )
                 logger.debug(f"✅ Parsed {col} to datetime")
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Could not parse {col}: {e}")
 
         # ===== 2. Define Column Categories =====
         # Text columns - keep as string
         text_columns = [
-            'lte_hour_granularity',
-            'lte_hour_subnet_name',
-            'lte_hour_me_name',
-            'lte_hour_enodeb_cu_name',
-            'lte_hour_enodeb_cu_id',
-            'lte_hour_lte_name',
-            'lte_hour_eutran_cell_name',
-            'lte_hour_dummy_hw_port'
+            "lte_hour_granularity",
+            "lte_hour_subnet_name",
+            "lte_hour_me_name",
+            "lte_hour_enodeb_cu_name",
+            "lte_hour_enodeb_cu_id",
+            "lte_hour_lte_name",
+            "lte_hour_eutran_cell_name",
+            "lte_hour_dummy_hw_port",
         ]
-        
+
         # Integer ID columns - keep as Int64 (CRITICAL for mapping!)
         integer_id_columns = [
-            'lte_hour_cell_id',
-            'lte_hour_eutran_cell_id',
-            'lte_hour_enodeb_id',
-            'lte_hour_subnet_id',
-            'lte_hour_me_id',
-            'lte_hour_lte_id'
+            "lte_hour_cell_id",
+            "lte_hour_eutran_cell_id",
+            "lte_hour_enodeb_id",
+            "lte_hour_subnet_id",
+            "lte_hour_me_id",
+            "lte_hour_lte_id",
         ]
-        
+
         exclude_from_conversion = datetime_cols + text_columns + integer_id_columns
-        
+
         # ===== 3. Handle Integer ID Columns - Keep as Int64 =====
         logger.info(f"🔑 Processing {len(integer_id_columns)} ID columns as Int64...")
         for col in integer_id_columns:
             if col not in df.columns:
                 continue
-                
+
             try:
                 if df[col].dtype in [pl.Int64, pl.Int32]:
                     # Already integer, keep it
@@ -729,14 +742,14 @@ class DataRepository:
                         pl.col(col).cast(pl.Int64, strict=False).alias(col)
                     )
                     logger.debug(f"✅ {col} kept as Int64")
-                
+
                 elif df[col].dtype == pl.Float64:
                     # Convert float to int (handles 131.0 → 131)
                     df = df.with_columns(
                         pl.col(col).cast(pl.Int64, strict=False).alias(col)
                     )
                     logger.debug(f"✅ {col} converted Float64 → Int64")
-                
+
                 elif df[col].dtype == pl.Utf8:
                     # String to int
                     df = df.with_columns(
@@ -746,25 +759,22 @@ class DataRepository:
                         .alias(col)
                     )
                     logger.debug(f"✅ {col} converted String → Int64")
-                    
+
             except Exception as e:
                 logger.warning(f"⚠️ Could not process ID column {col}: {e}")
 
         # ===== 4. Convert Metric Columns to Float64 =====
-        metric_cols = [
-            col for col in df.columns 
-            if col not in exclude_from_conversion
-        ]
-        
+        metric_cols = [col for col in df.columns if col not in exclude_from_conversion]
+
         logger.info(f"🔢 Converting {len(metric_cols)} metric columns to Float64...")
-        
+
         for col in metric_cols:
             try:
                 if df[col].dtype in [pl.Int64, pl.Float64]:
                     df = df.with_columns(
                         pl.col(col).cast(pl.Float64, strict=False).alias(col)
                     )
-                
+
                 elif df[col].dtype == pl.Utf8:
                     # Clean string metrics (remove commas, quotes, etc.)
                     df = df.with_columns(
@@ -776,19 +786,21 @@ class DataRepository:
                         .cast(pl.Float64, strict=False)
                         .alias(col)
                     )
-                
+
             except Exception as e:
                 logger.debug(f"⚠️ Could not convert {col}: {e}")
-                df = df.with_columns(
-                    pl.lit(None).cast(pl.Float64).alias(col)
-                )
+                df = df.with_columns(pl.lit(None).cast(pl.Float64).alias(col))
 
         # ===== 5. Verify cell_id is Int64 =====
-        if 'lte_hour_cell_id' in df.columns:
-            cell_dtype = df['lte_hour_cell_id'].dtype
-            sample_cells = df.select('lte_hour_cell_id').unique().sort('lte_hour_cell_id').head(10)
+        if "lte_hour_cell_id" in df.columns:
+            cell_dtype = df["lte_hour_cell_id"].dtype
+            sample_cells = (
+                df.select("lte_hour_cell_id").unique().sort("lte_hour_cell_id").head(10)
+            )
             logger.info(f"✅ lte_hour_cell_id dtype: {cell_dtype}")
-            logger.info(f"✅ Sample cell_ids: {sample_cells['lte_hour_cell_id'].to_list()}")
+            logger.info(
+                f"✅ Sample cell_ids: {sample_cells['lte_hour_cell_id'].to_list()}"
+            )
 
         logger.info("✅ Data cleansing complete")
         return df
@@ -803,44 +815,92 @@ class DataRepository:
             return df
 
         logger.info("🗺️ Adding sector and band mapping...")
-        
+
         # Verify cell_id is Int64
-        cell_dtype = df['lte_hour_cell_id'].dtype
+        cell_dtype = df["lte_hour_cell_id"].dtype
         logger.info(f"🔍 Cell_id dtype: {cell_dtype}")
-        
+
         if cell_dtype != pl.Int64:
-            logger.warning(f"⚠️ Expected Int64, got {cell_dtype}. Attempting conversion...")
-            df = df.with_columns(
-                pl.col("lte_hour_cell_id").cast(pl.Int64, strict=False).alias("lte_hour_cell_id")
+            logger.warning(
+                f"⚠️ Expected Int64, got {cell_dtype}. Attempting conversion..."
             )
-        
+            df = df.with_columns(
+                pl.col("lte_hour_cell_id")
+                .cast(pl.Int64, strict=False)
+                .alias("lte_hour_cell_id")
+            )
+
         # Sample values for debugging
-        sample_cells = df.select("lte_hour_cell_id").unique().sort("lte_hour_cell_id").head(10)
-        logger.info(f"🔍 Sample cell_id values: {sample_cells['lte_hour_cell_id'].to_list()}")
+        sample_cells = (
+            df.select("lte_hour_cell_id").unique().sort("lte_hour_cell_id").head(10)
+        )
+        logger.info(
+            f"🔍 Sample cell_id values: {sample_cells['lte_hour_cell_id'].to_list()}"
+        )
 
         # Define the mapping
         CELL_ID_MAPPING = {
             # 850 MHz
-            131: ("1", "850"), 132: ("2", "850"), 133: ("3", "850"), 134: ("4", "850"),
+            131: ("1", "850"),
+            132: ("2", "850"),
+            133: ("3", "850"),
+            134: ("4", "850"),
             # 1800 MHz
-            4: ("1", "1800"), 5: ("2", "1800"), 6: ("3", "1800"), 24: ("4", "1800"),
-            51: ("11", "1800"), 52: ("12", "1800"), 53: ("13", "1800"), 
-            54: ("14", "1800"), 55: ("15", "1800"), 56: ("16", "1800"),
-            14: ("M1", "1800"), 15: ("M2", "1800"), 16: ("M3", "1800"), 64: ("M4", "1800"),
+            4: ("1", "1800"),
+            5: ("2", "1800"),
+            6: ("3", "1800"),
+            24: ("4", "1800"),
+            51: ("11", "1800"),
+            52: ("12", "1800"),
+            53: ("13", "1800"),
+            54: ("14", "1800"),
+            55: ("15", "1800"),
+            56: ("16", "1800"),
+            14: ("M1", "1800"),
+            15: ("M2", "1800"),
+            16: ("M3", "1800"),
+            64: ("M4", "1800"),
             # 2100 MHz
-            1: ("1", "2100"), 2: ("2", "2100"), 3: ("3", "2100"), 7: ("1", "2100"),
-            8: ("2", "2100"), 9: ("3", "2100"), 27: ("4", "2100"),
-            91: ("11", "2100"), 92: ("12", "2100"), 93: ("13", "2100"), 
-            94: ("14", "2100"), 95: ("15", "2100"), 96: ("16", "2100"), 97: ("11", "2100"),
-            17: ("M1", "2100"), 18: ("M2", "2100"), 19: ("M3", "2100"), 67: ("M4", "2100"),
+            1: ("1", "2100"),
+            2: ("2", "2100"),
+            3: ("3", "2100"),
+            7: ("1", "2100"),
+            8: ("2", "2100"),
+            9: ("3", "2100"),
+            27: ("4", "2100"),
+            91: ("11", "2100"),
+            92: ("12", "2100"),
+            93: ("13", "2100"),
+            94: ("14", "2100"),
+            95: ("15", "2100"),
+            96: ("16", "2100"),
+            97: ("11", "2100"),
+            17: ("M1", "2100"),
+            18: ("M2", "2100"),
+            19: ("M3", "2100"),
+            67: ("M4", "2100"),
             # 2300 F1
-            111: ("1", "2300F1"), 112: ("2", "2300F1"), 113: ("3", "2300F1"), 114: ("4", "2300F1"),
-            141: ("11", "2300F1"), 142: ("12", "2300F1"), 143: ("13", "2300F1"),
-            144: ("14", "2300F1"), 145: ("15", "2300F1"), 146: ("16", "2300F1"),
+            111: ("1", "2300F1"),
+            112: ("2", "2300F1"),
+            113: ("3", "2300F1"),
+            114: ("4", "2300F1"),
+            141: ("11", "2300F1"),
+            142: ("12", "2300F1"),
+            143: ("13", "2300F1"),
+            144: ("14", "2300F1"),
+            145: ("15", "2300F1"),
+            146: ("16", "2300F1"),
             # 2300 F2
-            121: ("1", "2300F2"), 122: ("2", "2300F2"), 123: ("3", "2300F2"), 124: ("4", "2300F2"),
-            151: ("11", "2300F2"), 152: ("12", "2300F2"), 153: ("13", "2300F2"),
-            154: ("14", "2300F2"), 155: ("15", "2300F2"), 156: ("16", "2300F2"),
+            121: ("1", "2300F2"),
+            122: ("2", "2300F2"),
+            123: ("3", "2300F2"),
+            124: ("4", "2300F2"),
+            151: ("11", "2300F2"),
+            152: ("12", "2300F2"),
+            153: ("13", "2300F2"),
+            154: ("14", "2300F2"),
+            155: ("15", "2300F2"),
+            156: ("16", "2300F2"),
         }
 
         # Build mapping expressions - direct comparison with Int64
@@ -860,25 +920,28 @@ class DataRepository:
             )
 
         # Apply mapping
-        df = df.with_columns([
-            sector_expr.alias("sector"),
-            band_expr.alias("band")
-        ])
+        df = df.with_columns([sector_expr.alias("sector"), band_expr.alias("band")])
 
         # Log results with detail
         sector_counts = df.group_by("sector").agg(pl.count()).sort("sector")
         band_counts = df.group_by("band").agg(pl.count()).sort("band")
-        
+
         logger.info(f"📊 Sector mapping: {sector_counts.to_dicts()}")
         logger.info(f"📡 Band mapping: {band_counts.to_dicts()}")
-        
+
         # Warn if all Unknown
         unknown_count = df.filter(pl.col("sector") == "Unknown").height
         if unknown_count == len(df):
             logger.error(f"❌ ALL {len(df)} records mapped to Unknown!")
-            unique_cells = df.select("lte_hour_cell_id").unique().sort("lte_hour_cell_id")
-            logger.error(f"❌ Unique cell_ids in data: {unique_cells['lte_hour_cell_id'].to_list()}")
-            logger.error(f"❌ Expected cell_ids: {list(CELL_ID_MAPPING.keys())[:20]}...")
+            unique_cells = (
+                df.select("lte_hour_cell_id").unique().sort("lte_hour_cell_id")
+            )
+            logger.error(
+                f"❌ Unique cell_ids in data: {unique_cells['lte_hour_cell_id'].to_list()}"
+            )
+            logger.error(
+                f"❌ Expected cell_ids: {list(CELL_ID_MAPPING.keys())[:20]}..."
+            )
         elif unknown_count > 0:
             logger.warning(f"⚠️ {unknown_count} records have Unknown sector/band")
             unknown_cells = (
@@ -887,7 +950,9 @@ class DataRepository:
                 .unique()
                 .sort("lte_hour_cell_id")
             )
-            logger.warning(f"⚠️ Unmapped cell_ids: {unknown_cells['lte_hour_cell_id'].to_list()}")
+            logger.warning(
+                f"⚠️ Unmapped cell_ids: {unknown_cells['lte_hour_cell_id'].to_list()}"
+            )
         else:
             logger.info(f"✅ All {len(df)} records successfully mapped!")
 
