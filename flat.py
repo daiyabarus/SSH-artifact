@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore")
 
 # Konfigurasi
 CSV_FILE = "tower_data.csv"
-FLATNESS_THRESHOLD = 0.15
+FLATNESS_THRESHOLD = 0.05
 MIN_DATA_POINTS = 5
 
 

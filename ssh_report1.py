@@ -1233,7 +1233,6 @@ class SSHReportGenerator:
                                 if abs(float(cell_value)) < 1e-10:
                                     is_zero = True
                         except (ValueError, TypeError):
-
                             if isinstance(cell_value, str):
                                 str_val = cell_value.strip().lower()
                                 zero_patterns = [
@@ -2052,9 +2051,9 @@ class SSHReportGenerator:
 
 
 def main():
-    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260107\\"
+    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260109\\"
     TEMPLATE_PATH = "./template.xlsx"
-    OUTPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260107\\output_reports\\"
+    OUTPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260109\\output_reports\\"
     DB_PATH = "./newdatabase.db"
 
     generator = SSHReportGenerator(INPUT_FOLDER, TEMPLATE_PATH, OUTPUT_FOLDER, DB_PATH)

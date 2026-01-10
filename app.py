@@ -118,11 +118,6 @@ class ServiceContainer:
             return False
 
 
-# ============================================================================
-# UI COMPONENTS
-# ============================================================================
-
-
 class WelcomeScreen:
     """Welcome screen component - Single Responsibility"""
 
