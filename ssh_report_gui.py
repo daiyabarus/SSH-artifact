@@ -1361,8 +1361,8 @@ class SSHReportGenerator:
                             marker="o",
                             linewidth=3,
                             markersize=8,
-                            color="#d32f2f",
-                            label="Tower-wide",
+                            color="#f00dd2",
+                            label="Overall Latency",
                         )
                         
                         # Add threshold lines
