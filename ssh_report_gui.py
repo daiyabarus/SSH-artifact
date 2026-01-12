@@ -299,25 +299,6 @@ class SSHReportGenerator:
         df["newbh_date"] = df["newbh_date"].apply(self.parse_date_flexible)
         return df
 
-    # def _query_kqi_data(self, conn, tower_id: str) -> pd.DataFrame:
-    #     """Query KQI data"""
-    #     query = """
-    #     SELECT newkqi_date, 
-    #            newkqi_swe_l6,
-    #            newkqi_tcp_connect_delay_ms, 
-    #            newkqi_tcp_connect_rtt_count_times,
-    #            newkqi_server_side_uplink_tcp_packet_loss_rate,
-    #            newkqi_server_side_downlink_tcp_packet_loss_rate,
-    #            newkqi_client_side_uplink_tcp_packet_loss_rate,
-    #            newkqi_client_side_downlink_tcp_packet_loss_rate
-    #     FROM tbl_newkqi
-    #     WHERE newkqi_swe_l6 = ?
-    #     ORDER BY newkqi_date
-    #     """
-    #     df = pd.read_sql_query(query, conn, params=(tower_id,))
-    #     df["newkqi_date"] = df["newkqi_date"].apply(self.parse_date_flexible)
-    #     return df
-
     def _query_kqi_data(self, conn, tower_id: str) -> pd.DataFrame:
         """Query KQI data and aggregate by date"""
         query = """
@@ -1010,251 +991,6 @@ class SSHReportGenerator:
         buf.seek(0)
         return buf.getvalue()
 
-    # def create_failed_kpi_charts(
-    #     self,
-    #     ta_df: pd.DataFrame,
-    #     wd_merged: Optional[pd.DataFrame],
-    #     bh_merged: Optional[pd.DataFrame],
-    #     kqi_df: Optional[pd.DataFrame],
-    #     failed_kpis: List[Tuple[int, str]],
-    #     cluster: str,
-    #     tower: str,
-    # ) -> Optional[bytes]:
-    #     """Generate charts for failed KPIs"""
-    #     if not failed_kpis:
-    #         print("  ℹ No failed KPIs detected → skipping failed KPI charts")
-    #         return None
-
-    #     print(f"  📊 Generating {len(failed_kpis)} Failed KPI chart(s)...")
-
-    #     height_per_chart = 5.5
-    #     fig = plt.figure(figsize=(22, max(6, height_per_chart * len(failed_kpis))))
-    #     gs = fig.add_gridspec(len(failed_kpis), 1, hspace=0.6)
-
-    #     chart_idx = 0
-    #     plotted_any = False
-
-    #     # Map data sources
-    #     data_sources = {
-    #         "bh": bh_merged,
-    #         "wd": wd_merged,
-    #         "kqi": kqi_df,
-    #     }
-
-    #     for row_num, band_name in failed_kpis:
-    #         ax = fig.add_subplot(gs[chart_idx])
-    #         ax.set_frame_on(False)
-    #         ax.set_xticks([])
-    #         ax.set_yticks([])
-    #         for spine in ax.spines.values():
-    #             spine.set_visible(False)
-
-    #         config = self.kpi_configs.get(row_num)
-    #         if not config:
-    #             ax.text(
-    #                 0.5,
-    #                 0.5,
-    #                 f"KPI Row {row_num} not supported",
-    #                 ha="center",
-    #                 va="center",
-    #                 transform=ax.transAxes,
-    #                 fontsize=12,
-    #                 color="gray",
-    #             )
-    #             chart_idx += 1
-    #             continue
-
-    #         source_df = data_sources.get(config.source_df_name)
-
-    #         # Tower-based KPIs (Latency, Packet Loss)
-    #         if row_num in [18, 19]:
-    #             if source_df is None or source_df.empty:
-    #                 ax.text(
-    #                     0.5,
-    #                     0.5,
-    #                     "No data available",
-    #                     ha="center",
-    #                     va="center",
-    #                     transform=ax.transAxes,
-    #                     fontsize=12,
-    #                     color="gray",
-    #                 )
-    #             else:
-    #                 ax.plot(
-    #                     source_df[config.date_column],
-    #                     source_df[config.column_name],
-    #                     marker="o",
-    #                     linewidth=2.5,
-    #                     markersize=6,
-    #                     color="#d32f2f",
-    #                     label="Tower-wide",
-    #                 )
-    #                 ax.set_title(
-    #                     f"{self.kpi_mapping.get(row_num)}",
-    #                     fontsize=14,
-    #                     fontweight="bold",
-    #                 )
-    #                 ax.set_ylabel(f"{config.title} [{config.unit}]", fontsize=12)
-    #                 ax.set_xlabel("Date", fontsize=12)
-    #                 ax.grid(True, linewidth=1.2, alpha=0.8, linestyle="-", color="gray")
-    #                 ax.tick_params(axis="x", rotation=45)
-    #                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-    #                 ax.legend(fontsize=10, loc="best", frameon=False)
-
-    #                 if config.ylim_min is not None:
-    #                     ax.set_ylim(bottom=config.ylim_min)
-    #                 if config.ylim_max is not None:
-    #                     ax.set_ylim(top=config.ylim_max)
-    #                 plotted_any = True
-
-    #             ax.set_title(
-    #                 f"{self.kpi_mapping.get(row_num)} (Tower-based)",
-    #                 fontsize=16,
-    #                 fontweight="bold",
-    #                 pad=20,
-    #             )
-
-    #         # Sector-based KPIs
-    #         else:
-    #             if source_df is None or source_df.empty:
-    #                 ax.text(
-    #                     0.5,
-    #                     0.5,
-    #                     "No data available",
-    #                     ha="center",
-    #                     va="center",
-    #                     transform=ax.transAxes,
-    #                     fontsize=12,
-    #                     color="gray",
-    #                 )
-    #             else:
-    #                 allowed_bands = self.band_config.values.get(band_name, [])
-    #                 filtered_df = source_df.copy()
-
-    #                 if filtered_df.empty:
-    #                     ax.text(
-    #                         0.5,
-    #                         0.5,
-    #                         f"No data for {band_name}",
-    #                         ha="center",
-    #                         va="center",
-    #                         transform=ax.transAxes,
-    #                         fontsize=12,
-    #                         color="gray",
-    #                     )
-    #                 else:
-    #                     sectors = filtered_df["newta_sector_name"].dropna().unique()
-    #                     if len(sectors) == 0:
-    #                         ax.text(
-    #                             0.5,
-    #                             0.5,
-    #                             "No sector data",
-    #                             ha="center",
-    #                             va="center",
-    #                             transform=ax.transAxes,
-    #                             fontsize=12,
-    #                             color="gray",
-    #                         )
-    #                     else:
-    #                         num_sectors = min(3, len(sectors))
-    #                         inner_axes = self.create_sector_subplots(
-    #                             ax, sectors, num_sectors
-    #                         )
-
-    #                         for idx, sector in enumerate(sectors[:num_sectors]):
-    #                             inner_ax = inner_axes[idx]
-    #                             sector_data = filtered_df[
-    #                                 filtered_df["newta_sector_name"] == sector
-    #                             ]
-    #                             bands = sector_data[config.band_column].unique()
-
-    #                             for band_idx, band in enumerate(bands):
-    #                                 band_data = sector_data[
-    #                                     sector_data[config.band_column] == band
-    #                                 ].sort_values(config.date_column)
-    #                                 if band_data.empty:
-    #                                     continue
-
-    #                                 band_str = (
-    #                                     str(int(band)) if pd.notna(band) else "Unknown"
-    #                                 )
-
-    #                                 # Highlight failed band
-    #                                 if int(band) in allowed_bands:
-    #                                     color = "#d32f2f"
-    #                                     linewidth = 4
-    #                                     alpha = 1.0
-    #                                 else:
-    #                                     color = self.color_palette[
-    #                                         band_idx % len(self.color_palette)
-    #                                     ]
-    #                                     linewidth = 2
-    #                                     alpha = 0.6
-
-    #                                 inner_ax.plot(
-    #                                     band_data[config.date_column],
-    #                                     band_data[config.column_name],
-    #                                     marker="o",
-    #                                     label=f"L{band_str}",
-    #                                     color=color,
-    #                                     linewidth=linewidth,
-    #                                     markersize=5,
-    #                                     alpha=alpha,
-    #                                 )
-
-    #                             inner_ax.set_title(
-    #                                 f"Sector {sector}",
-    #                                 fontsize=12,
-    #                                 fontweight="bold",
-    #                                 pad=10,
-    #                             )
-    #                             inner_ax.set_xlabel("Date", fontsize=10)
-    #                             inner_ax.set_ylabel(
-    #                                 f"{config.title} [{config.unit}]", fontsize=10
-    #                             )
-    #                             inner_ax.legend(fontsize=8, loc="best", frameon=False)
-    #                             inner_ax.grid(
-    #                                 True,
-    #                                 linewidth=1.2,
-    #                                 alpha=0.8,
-    #                                 linestyle="-",
-    #                                 color="gray",
-    #                             )
-    #                             inner_ax.tick_params(axis="x", rotation=45, labelsize=9)
-    #                             inner_ax.xaxis.set_major_formatter(
-    #                                 mdates.DateFormatter("%m/%d")
-    #                             )
-
-    #                             if config.ylim_min is not None:
-    #                                 inner_ax.set_ylim(bottom=config.ylim_min)
-    #                             if config.ylim_max is not None:
-    #                                 inner_ax.set_ylim(top=config.ylim_max)
-
-    #                             if num_sectors > 1:
-    #                                 inner_ax.set_facecolor("#f9f9f9")
-
-    #                         plotted_any = True
-
-    #             kpi_name = self.kpi_mapping.get(row_num, f"Row {row_num}")
-    #             ax.set_title(
-    #                 f"{kpi_name} - {band_name}", fontsize=16, fontweight="bold", pad=20
-    #             )
-
-    #         chart_idx += 1
-
-    #     if not plotted_any:
-    #         print("  ⚠ No chart was successfully plotted → skipping image")
-    #         plt.close(fig)
-    #         return None
-
-    #     plt.tight_layout(rect=[0, 0, 1, 1])
-    #     buf = BytesIO()
-    #     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
-    #     plt.close(fig)
-    #     buf.seek(0)
-    #     print("  ✓ Failed KPI charts generated successfully")
-    #     return buf.getvalue()
-
     def create_failed_kpi_charts(
         self,
         ta_df: pd.DataFrame,
@@ -1279,7 +1015,6 @@ class SSHReportGenerator:
         chart_idx = 0
         plotted_any = False
 
-        # Map data sources
         data_sources = {
             "bh": bh_merged,
             "wd": wd_merged,
@@ -1311,7 +1046,6 @@ class SSHReportGenerator:
 
             source_df = data_sources.get(config.source_df_name)
 
-            # Tower-based KPIs (Latency, Packet Loss)
             if row_num in [18, 19]:
                 kpi_name = self.kpi_mapping.get(row_num, f"Row {row_num}")
                 ax.set_title(
@@ -1333,10 +1067,7 @@ class SSHReportGenerator:
                         color="gray",
                     )
                 else:
-                    # Create a proper subplot for tower-based KPI
                     inner_ax = ax.inset_axes([0.06, 0.12, 0.88, 0.76])
-                    
-                    # Filter out NaN values
                     plot_data = source_df[[config.date_column, config.column_name]].dropna()
                     
                     if plot_data.empty:
@@ -1365,8 +1096,7 @@ class SSHReportGenerator:
                             label="Overall Latency",
                         )
                         
-                        # Add threshold lines
-                        if row_num == 19:  # Overall Latency
+                        if row_num == 19:
                             inner_ax.axhline(
                                 y=120,
                                 color="#FFA500",
@@ -1383,7 +1113,7 @@ class SSHReportGenerator:
                                 alpha=0.8,
                                 label="Critical 200ms"
                             )
-                        elif row_num == 18:  # Overall Packet Loss Rate
+                        elif row_num == 18:
                             inner_ax.axhline(
                                 y=1.0,
                                 color="#FFA500",
@@ -2157,9 +1887,9 @@ try {{
 
 
 def main():
-    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260110\\"
+    INPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260112\\"
     TEMPLATE_PATH = "./template.xlsx"
-    OUTPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260110\\output_reports\\"
+    OUTPUT_FOLDER = "D:\\NEW SITE\\WORK\\REQ\\20260112\\output_reports\\"
     DB_PATH = "./newdatabase.db"
 
     generator = SSHReportGenerator(INPUT_FOLDER, TEMPLATE_PATH, OUTPUT_FOLDER, DB_PATH)
